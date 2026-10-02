@@ -7,3 +7,149 @@ html,body,#app-content,.view-host,.view,.panel,.view-grid,.view-grid>*,.metric-s
 img,svg,video,canvas{max-width:100%;height:auto}.field,button,.secondary-btn,.primary-btn,.danger-btn,.ghost-btn,.icon-btn{max-width:100%}button{white-space:normal;overflow-wrap:anywhere}.panel-head>div{min-width:0}.panel-head h2,.panel-head p{overflow-wrap:anywhere}.bot-card-title h3,.bot-card-title .mono,.stat-row span,.stat-row b{overflow-wrap:anywhere;word-break:break-word}
 @media(max-width:768px){body{overflow-x:hidden}.topbar,.topbar-left,.topbar-actions{width:100%}.topbar-left{flex:1 1 100%}.topbar-actions{flex:1 1 100%;align-items:stretch}.topbar-actions>*{max-width:100%}.panel{width:100%;overflow:hidden}.panel.flush{overflow:hidden}.view-grid,.metric-strip,.bot-registry-grid{width:100%;grid-template-columns:minmax(0,1fr)}.action-row{width:100%;align-items:stretch}.action-row>*{flex:1 1 auto;max-width:100%}.auth-inline-card{flex-wrap:wrap}.auth-inline-card>*{max-width:100%}.profile-hero-actions{align-items:stretch}.profile-hero-actions>*{max-width:100%}.profile-hero-actions .status-badge{white-space:normal}.bot-card-top{min-width:0;flex-wrap:wrap}.bot-status{max-width:100%}.bot-form .view-grid{grid-template-columns:minmax(0,1fr)}.bot-form .action-row{flex-direction:column}.bot-form .action-row>*{width:100%}.admin-profile-modal{max-height:calc(100vh - 16px);overflow:auto}.admin-profile-modal form{width:100%;box-sizing:border-box}.admin-profile-form-grid{width:100%}}
 @media(max-width:480px){.topbar{gap:10px}.topbar-actions{gap:6px}.topbar-actions>*{width:100%}.topbar-actions .ghost-btn{display:flex}.profile-hero{width:100%}.profile-hero-actions{grid-column:1/-1}.profile-hero-actions>*{width:100%;margin-left:0!important}.metric{width:100%}.stat-row{width:100%}.tunnel{width:100%}.bot-card-top{align-items:flex-start}.bot-avatar{flex:none}.bot-card-title{min-width:0}.admin-profile-modal{width:calc(100vw - 16px)}}
+
+/* Compact single-row mobile header */
+@media(max-width:768px){
+  .topbar{
+    height:60px;
+    min-height:60px;
+    width:100%;
+    padding:8px 12px;
+    gap:8px;
+    flex-wrap:nowrap;
+    align-items:center;
+    justify-content:space-between;
+    overflow:hidden;
+  }
+  .topbar-left{
+    width:auto;
+    min-width:0;
+    flex:0 1 auto;
+    display:flex;
+    align-items:center;
+    gap:7px;
+    flex-wrap:nowrap;
+    overflow:hidden;
+  }
+  .topbar-left>div{
+    min-width:0;
+    overflow:hidden;
+  }
+  .topbar-left .eyebrow{
+    display:none;
+  }
+  .topbar h1{
+    margin:0;
+    font-size:14px;
+    line-height:1.1;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .topbar-actions{
+    width:auto;
+    min-width:0;
+    flex:0 0 auto;
+    display:flex;
+    flex-direction:row;
+    align-items:center;
+    justify-content:flex-end;
+    flex-wrap:nowrap;
+    gap:8px;
+    overflow:hidden;
+  }
+  .topbar-actions .status-badge{
+    flex:0 1 auto;
+    min-width:0;
+    max-width:115px;
+    padding:5px 7px;
+    gap:5px;
+    font-size:10px;
+    line-height:1;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .topbar-actions .status-badge .status-dot{
+    width:6px;
+    height:6px;
+    flex:0 0 6px;
+  }
+  .topbar-actions .repo-pill{
+    display:none;
+  }
+  .topbar-actions .ghost-btn{
+    width:34px;
+    min-width:34px;
+    max-width:34px;
+    height:34px;
+    min-height:34px;
+    padding:0;
+    flex:0 0 34px;
+    gap:0;
+    border-radius:9px;
+  }
+  .topbar-actions .ghost-btn span{
+    display:none;
+  }
+  .topbar-actions .ghost-btn svg{
+    width:15px;
+    height:15px;
+    flex:0 0 15px;
+  }
+  #app-content{
+    width:100%;
+    padding:10px 12px 2rem;
+  }
+  #app-content>.view{
+    padding-top:0;
+  }
+}
+@media(max-width:480px){
+  .topbar{
+    height:58px;
+    min-height:58px;
+    padding:7px 9px;
+    gap:6px;
+  }
+  .topbar-left{
+    flex:1 1 auto;
+  }
+  .topbar-left .mobile-only{
+    width:32px;
+    min-width:32px;
+    height:32px;
+    padding:0;
+    flex:0 0 32px;
+  }
+  .topbar h1{
+    font-size:13px;
+  }
+  .topbar-actions{
+    gap:6px;
+  }
+  .topbar-actions .status-badge{
+    max-width:88px;
+    padding:5px 6px;
+    font-size:9px;
+  }
+  .topbar-actions .ghost-btn{
+    width:32px;
+    min-width:32px;
+    max-width:32px;
+    height:32px;
+    min-height:32px;
+    flex-basis:32px;
+  }
+  #app-content{
+    padding:8px 10px 1.5rem;
+  }
+}
+@media(max-width:380px){
+  .topbar h1{
+    display:none;
+  }
+  .topbar-actions .status-badge{
+    max-width:78px;
+  }
+}
