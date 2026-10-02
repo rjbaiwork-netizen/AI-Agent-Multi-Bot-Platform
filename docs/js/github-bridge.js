@@ -39,9 +39,18 @@
     const token=getToken();if(!token)return "";
     const data=await fetch(`${API}/actions/jobs/${jobId}/logs`,{headers:jsonHeaders(token)});if(!data.ok)throw new Error(`GitHub job log HTTP ${data.status}`);return data.text();
   }
+  async function fetchPublishedTunnelUrl(){
+    const token=getToken();if(!token)return null;
+    try{
+      const data=await request(API+"/commits/"+encodeURIComponent(cfg.github.branch)+"/status",{headers:jsonHeaders(token)});
+      const status=(data.statuses||[]).find(s=>s.context==="ephemeral-backend"&&s.state==="success"&&/^https:\/\//i.test(s.target_url||""));
+      return status?.target_url||null;
+    }catch(e){window.DashboardUI?.log("Published Ngrok status pending: "+e.message,"warn");return null}
+  }
   async function discoverTunnelUrl(runId){
+    const published=await fetchPublishedTunnelUrl();if(published)return published;
     const jobs=await getRunJobs(runId);
-    for(const job of jobs){try{const log=await readJobLog(job.id);const matches=log.match(/https:\/\/(?:[a-z0-9-]+\.)?(?:ngrok(?:-free)?\.app|ngrok\.io)\b[^\s"'<>]*/gi)||[];const url=matches.find(u=>/^https:\/\//i.test(u));if(url)return url.replace(/[),.;]+$/,"")}catch(e){window.DashboardUI?.log(`Could not read job log ${job.id}: ${e.message}`,"warn")}}
+    for(const job of jobs){try{const log=await readJobLog(job.id);const matches=log.match(/https:\/\/(?:[a-z0-9-]+\.)?(?:ngrok(?:-free)?\.app|ngrok\.io)\b[^\s"'<>]*/gi)||[];const url=matches.find(u=>/^https:\/\//i.test(u));if(url)return url.replace(/[),.;]+$/,"")}catch(e){window.DashboardUI?.log("Could not read job log "+job.id+": "+e.message,"warn")}}
     return null;
   }
   async function pollWorkflowStatus({onChange,maxMs=120000}={}){
@@ -76,5 +85,5 @@ async function bootAndDiscover({onWorkflowChange,maxMs=180000}={}){
   })().finally(()=>{bootPromise=null});
   return bootPromise;
 }
-  window.GitHubBridge={triggerBackendStart,fetchWorkflowStatus,pollWorkflowStatus,discoverTunnelUrl,bootAndDiscover,verifyToken,getToken};
+  window.GitHubBridge={triggerBackendStart,fetchWorkflowStatus,pollWorkflowStatus,discoverTunnelUrl,fetchPublishedTunnelUrl,bootAndDiscover,verifyToken,getToken};
 })();

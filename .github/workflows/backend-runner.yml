@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: ephemeral-backend-${{ github.event.client_payload.task_id || github.run_id }}
@@ -23,6 +24,8 @@ jobs:
       TELEGRAM_BOT_NAME: ${{ secrets.TELEGRAM_BOT_NAME }}
       TELEGRAM_BOT_LINKS: ${{ secrets.TELEGRAM_BOT_LINKS }}
       BACKEND_RUN_TIMEOUT_SECONDS: 600
+      NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+      NGROK_STATUS_CONTEXT: ephemeral-backend
 
     steps:
       - name: Checkout repository
@@ -66,7 +69,27 @@ jobs:
           BACKEND_PID=$!
 
           echo "Ephemeral backend started with PID $BACKEND_PID"
-          timeout --signal=TERM --kill-after=10s "${BACKEND_RUN_TIMEOUT_SECONDS}s"             tail --pid="$BACKEND_PID" -f /dev/null
+          NGROK_URL=""
+          for _ in {1..60}; do
+            NGROK_URL="$(curl -fsS http://127.0.0.1:4040/api/tunnels 2>/dev/null | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next((t.get("public_url","") for t in data.get("tunnels",[]) if t.get("public_url","")), ""))' 2>/dev/null || true)"
+            if [[ "$NGROK_URL" == https://* ]]; then break; fi
+            sleep 1
+          done
+          if [[ "$NGROK_URL" != https://* ]]; then
+            echo "::error::Ngrok tunnel URL was not available from http://127.0.0.1:4040/api/tunnels"
+            exit 1
+          fi
+          echo "NGROK_URL=$NGROK_URL" >> "$GITHUB_ENV"
+          echo "Ngrok URL captured: $NGROK_URL"
+          STATUS_PAYLOAD="$(python3 -c 'import json,os; print(json.dumps({"state":"success","target_url":os.environ["NGROK_URL"],"description":"Ephemeral backend is online","context":os.environ["NGROK_STATUS_CONTEXT"]}))')"
+          curl -fsS -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -d "$STATUS_PAYLOAD"
+          echo "Ephemeral backend published at $NGROK_URL"
+          timeout --signal=TERM --kill-after=10s "${BACKEND_RUN_TIMEOUT_SECONDS}s" tail --pid="$BACKEND_PID" -f /dev/null
 
       - name: Graceful cleanup
         if: always()
