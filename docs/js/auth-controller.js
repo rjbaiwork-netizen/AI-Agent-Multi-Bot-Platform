@@ -24,14 +24,29 @@
     const card=$("oauth-session-card");if(card)card.classList.toggle("connected",logged);
   }
   function setProgress(message){setText("oauth-flow-status",message);window.DashboardUI?.log("OAuth: "+message,"info")}
+  function clearError(){const e=$("oauth-error");if(e){e.hidden=true;e.textContent=""}}
+  function showError(message){const e=$("oauth-error");if(e){e.hidden=false;e.textContent=String(message||"GitHub OAuth request failed.")}setProgress("Error: "+message);window.DashboardUI?.log("OAuth error: "+message,"error")}
+  function friendlyNetworkError(e){
+    if(e instanceof TypeError) return "GitHub OAuth could not be reached from this browser. This may be a CORS/network block. Verify the GitHub OAuth App, Device Flow setting, and that this page is served over HTTPS.";
+    return e?.message||"GitHub OAuth request failed.";
+  }
   async function parseResponse(r){
     const text=await r.text();let data={};try{data=JSON.parse(text)}catch{data=Object.fromEntries(new URLSearchParams(text))}
-    if(!r.ok||data.error)throw new Error(data.error_description||data.error||"GitHub OAuth request failed.");
+    if(!r.ok||data.error){
+      const code=String(data.error||"");
+      if(code==="unauthorized_client") throw new Error("GitHub rejected this OAuth app. Confirm Device Flow is enabled for the OAuth App and that Client ID \""+clientId()+"\" is correct.");
+      if(code==="bad_verification_code") throw new Error("GitHub rejected the device code. Start sign-in again.");
+      if(code==="invalid_client") throw new Error("GitHub reports an invalid OAuth Client ID. Verify AppConfig.auth.githubClientId.");
+      throw new Error((data.error_description||code||"GitHub OAuth request failed.")+" (HTTP "+r.status+").");
+    }
     return data;
   }
   async function requestDeviceCode(){
     const id=clientId();if(!id)throw new Error("GitHub OAuth Client ID is not configured. Set AppConfig.auth.githubClientId in docs/js/config.js.");
-    const r=await fetch(DEVICE_URL,{method:"POST",headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:id,scope:scopes()})});
+    let r;
+    try{
+      r=await fetch(DEVICE_URL,{method:"POST",headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:id,scope:scopes()})});
+    }catch(e){throw new Error(friendlyNetworkError(e))}
     return parseResponse(r);
   }
   async function pollToken(deviceCode,interval,expiresIn){
@@ -39,13 +54,18 @@
     let wait=Math.max(5000,Number(interval||5)*1000);
     while(!flowAbort&&Date.now()<deadline){
       await sleep(wait);if(flowAbort)break;
-      const r=await fetch(TOKEN_URL,{method:"POST",headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:id,device_code:deviceCode,grant_type:"urn:ietf:params:oauth:grant-type:device_code"})});
+      let r;
+      try{
+        r=await fetch(TOKEN_URL,{method:"POST",headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:id,device_code:deviceCode,grant_type:"urn:ietf:params:oauth:grant-type:device_code"})});
+      }catch(e){throw new Error(friendlyNetworkError(e))}
       const text=await r.text();let data={};try{data=JSON.parse(text)}catch{data=Object.fromEntries(new URLSearchParams(text))}
       if(data.access_token)return data;
       if(data.error==="authorization_pending"){setProgress("Waiting for GitHub authorization…");continue}
       if(data.error==="slow_down"){wait+=5000;setProgress("GitHub requested slower polling…");continue}
       if(data.error==="expired_token")throw new Error("The GitHub device code expired. Start sign-in again.");
       if(data.error==="access_denied")throw new Error("GitHub authorization was denied.");
+      if(data.error==="unauthorized_client")throw new Error("GitHub rejected this OAuth app. Confirm Device Flow is enabled.");
+      if(data.error==="invalid_client")throw new Error("GitHub reports an invalid OAuth Client ID. Verify AppConfig.auth.githubClientId.");
       throw new Error(data.error_description||data.error||"GitHub authorization failed.");
     }
     throw new Error("OAuth sign-in was cancelled or timed out.");
@@ -77,19 +97,21 @@
   async function startLogin(){
     if(pollTimer)return;
     flowAbort=false;
+    clearError();
+    setProgress("Requesting a GitHub device code…");
     try{
       const d=await requestDeviceCode();
       setText("oauth-device-code",d.user_code);setText("oauth-device-expires",Math.ceil(Number(d.expires_in||900)/60)+" minutes");
-      const link=$("oauth-verify-link");if(link){link.href=d.verification_uri||"https://github.com/login/device";link.hidden=false}
+      const link=$("oauth-verify-link");if(link){link.href=d.verification_uri_complete||d.verification_uri||"https://github.com/login/device";link.hidden=false}
       $("oauth-device-card")?.classList.add("visible");setProgress("Verification code ready. Complete authorization in GitHub.");
-      try{window.open(d.verification_uri||"https://github.com/login/device","_blank","noopener,noreferrer")}catch{}
+      try{window.open(d.verification_uri_complete||d.verification_uri||"https://github.com/login/device","_blank","noopener,noreferrer")}catch{}
       pollTimer=pollToken(d.device_code,d.interval,d.expires_in).then(async data=>{
         const user=await fetchUser(data.access_token),expiresAt=data.expires_in?Date.now()+Number(data.expires_in)*1000:0;
         window.TokenStore.setOAuth(data.access_token,data.refresh_token,{login:user.login,id:user.id,avatar:user.avatar_url,scope:data.scope||scopes(),expiresAt,refreshExpiresAt:data.refresh_token_expires_in?Date.now()+Number(data.refresh_token_expires_in)*1000:0});
         setProgress("Authenticated as @"+user.login+".");window.DashboardUI?.toast("GitHub OAuth login successful.");syncUI();
         if(location.hash==="#login")location.hash="#control-center";
-      }).catch(e=>{setProgress(e.message);window.DashboardUI?.toast(e.message)}).finally(()=>{pollTimer=null;syncUI()});
-    }catch(e){setProgress(e.message);window.DashboardUI?.toast(e.message)}
+      }).catch(e=>{showError(friendlyNetworkError(e));window.DashboardUI?.toast(e.message)}).finally(()=>{pollTimer=null;syncUI()});
+    }catch(e){showError(friendlyNetworkError(e));window.DashboardUI?.toast(e.message)}
   }
   function logout(){
     flowAbort=true;pollTimer=null;window.TokenStore.clearOAuth();syncUI();window.DashboardUI?.toast("GitHub OAuth session cleared.");if(location.hash==="#login")location.hash="#control-center";
