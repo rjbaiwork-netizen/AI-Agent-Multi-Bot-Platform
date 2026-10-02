@@ -19,7 +19,7 @@ const host=document.getElementById("app-content")||document.getElementById("app-
 host.innerHTML='<div class="panel"><p class="muted">Loading module…</p></div>';
 try{const r=await fetch(cfg.file,{cache:"no-store"});if(!r.ok)throw new Error("Module HTTP "+r.status);host.innerHTML=await r.text()}
 catch(e){host.innerHTML='<div class="panel"><p class="eyebrow">MODULE LOAD ERROR</p><h2>Could not load '+cfg.title+'</h2><p class="muted">'+escapeHtml(e.message)+'</p></div>';window.DashboardUI?.log("View load failed: "+e.message,"error");return}
-window.lucide?.createIcons();window.DashboardUI?.onView(current);window.BotController?.onView(current);
+window.lucide?.createIcons();window.AppRouteState={route:current,title:cfg.title,loadedAt:new Date().toISOString()};window.DashboardUI?.onView(current);window.BotController?.onView(current);window.BotController?.syncRoute?.(current);
 }
 function navigate(){load(location.hash.replace(/^#/,"")||"control-center")}
 function escapeHtml(v){return String(v).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}

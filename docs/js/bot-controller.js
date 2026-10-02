@@ -1,34 +1,35 @@
 (() => {
-function onView(route){
- if(route!=="chat")return;
- const send=document.getElementById("send-task");
- const prompt=document.getElementById("master-prompt");
- if(send&&!send.dataset.bound){send.dataset.bound="1";send.addEventListener("click",executeTask)}
- if(prompt&&!prompt.dataset.bound){prompt.dataset.bound="1";prompt.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter")executeTask()})}
+const KEY="ai-agent-multi-bot.bot-brains";
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+function readLocal(){try{return JSON.parse(localStorage.getItem(KEY)||"[]")}catch{return[]}}
+function writeLocal(bots){try{localStorage.setItem(KEY,JSON.stringify(bots));sessionStorage.setItem(KEY,JSON.stringify(bots))}catch{}}
+function mirrorBot(bot){const bots=readLocal(),idx=bots.findIndex(b=>b.id===bot.id),safe=Object.assign({},bot,{brain:bot.brain?Object.assign({},bot.brain,{memory:Array.isArray(bot.brain.memory)?bot.brain.memory:[]}):undefined});if(idx>=0)bots[idx]=safe;else bots.push(safe);writeLocal(bots);return safe}
+function uuid(){if(crypto.randomUUID)return crypto.randomUUID();return "bot-"+Date.now()+"-"+Math.random().toString(16).slice(2)}
+function localCreate(data){const bot={id:uuid(),name:data.name.trim(),category:data.category.trim(),role:data.category.trim(),skills:data.skills,systemPrompt:data.systemPrompt.trim(),status:"idle",activeTaskId:null,memoryCount:0,brain:{schemaVersion:1,memory:[]},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};mirrorBot(bot);return bot}
+async function list(){if(window.BackendConnector.getBaseUrl()){try{const r=await window.BackendConnector.listBots();r.bots.forEach(mirrorBot);return r.bots}catch(e){window.DashboardUI?.log("Bot API unavailable; using browser mirror: "+e.message,"warn")}}return readLocal()}
+async function create(data){if(window.BackendConnector.getBaseUrl()){try{return mirrorBot((await window.BackendConnector.createBot(data)).bot)}catch(e){window.DashboardUI?.log("Remote bot creation failed: "+e.message,"warn")}}return localCreate(data)}
+async function update(id,data){if(window.BackendConnector.getBaseUrl()){try{return mirrorBot((await window.BackendConnector.updateBot(id,data)).bot)}catch(e){window.DashboardUI?.log("Remote bot update failed: "+e.message,"warn")}}const bots=readLocal(),i=bots.findIndex(b=>b.id===id);if(i<0)throw new Error("Bot not found.");bots[i]=Object.assign({},bots[i],data, {updatedAt:new Date().toISOString()});writeLocal(bots);return bots[i]}
+async function reset(id){if(window.BackendConnector.getBaseUrl()){try{return mirrorBot((await window.BackendConnector.resetBotBrain(id)).bot)}catch(e){window.DashboardUI?.log("Remote brain reset failed: "+e.message,"warn")}}return update(id,{memoryCount:0,brain:{schemaVersion:1,memory:[]},status:"idle",activeTaskId:null})}
+async function remove(id){if(window.BackendConnector.getBaseUrl()){try{const r=await window.BackendConnector.deleteBot(id);writeLocal(readLocal().filter(b=>b.id!==id));return r.bot}catch(e){window.DashboardUI?.log("Remote bot delete failed: "+e.message,"warn")}}writeLocal(readLocal().filter(b=>b.id!==id));return{id}}
+function render(bots){
+const grid=$("bot-registry-grid");if(!grid)return;
+$("bot-count")&&($("bot-count").textContent=bots.length);$("bot-active-count")&&($("bot-active-count").textContent=bots.filter(b=>["active","running"].includes(b.status)).length);$("bot-memory-count")&&($("bot-memory-count").textContent=bots.reduce((n,b)=>n+(Number(b.memoryCount)||Number(b.brain?.memory?.length)||0),0));
+if(!bots.length){grid.innerHTML='<div class="panel"><p class="muted">No registered bots. Create one manually or ask the Master Agent to create one.</p></div>';return}
+grid.innerHTML=bots.map(bot=>'<article class="bot-profile-card" data-bot-id="'+esc(bot.id)+'"><div class="bot-card-top"><div class="bot-avatar"><i data-lucide="bot"></i></div><div class="bot-card-title"><h3>'+esc(bot.name)+'</h3><span class="mono">'+esc(bot.id)+'</span></div><span class="bot-status '+(bot.status==="active"||bot.status==="running"?"active":"idle")+'">'+esc(bot.status||"idle")+'</span></div><div class="expertise">'+(bot.skills||[]).map(s=>'<span class="scope-badge">'+esc(s)+'</span>').join("")+'</div><div class="stat-row"><span>Role / Category</span><b>'+esc(bot.category||bot.role)+'</b></div><div class="stat-row"><span>Brain Memory</span><b class="ok">'+(Number(bot.memoryCount)||Number(bot.brain?.memory?.length)||0)+' entries</b></div><div class="stat-row"><span>Task</span><b class="truncate">'+esc(bot.activeTaskId||"Idle")+'</b></div><div class="action-row"><button class="secondary-btn bot-edit" data-id="'+esc(bot.id)+'">Edit</button><button class="secondary-btn bot-reset" data-id="'+esc(bot.id)+'">Reset Brain</button><button class="danger-btn bot-delete" data-id="'+esc(bot.id)+'">Delete</button></div></article>').join("");window.lucide?.createIcons();
+grid.querySelectorAll(".bot-edit").forEach(b=>b.onclick=()=>edit(b.dataset.id,bots));
+grid.querySelectorAll(".bot-reset").forEach(b=>b.onclick=async()=>{if(!confirm("Reset this bot's isolated brain memory?"))return;const bot=await reset(b.dataset.id);mirrorBot(bot);await refresh();window.DashboardUI?.toast("Brain memory reset.")});
+grid.querySelectorAll(".bot-delete").forEach(b=>b.onclick=async()=>{if(!confirm("Delete this bot and its brain database?"))return;await remove(b.dataset.id);await refresh();window.DashboardUI?.toast("Bot deleted.")});
 }
-async function executeTask(){
- const prompt=document.getElementById("master-prompt");
- const strategy=document.getElementById("chat-strategy");
- const text=prompt?.value.trim();
- if(!text)return window.DashboardUI?.toast("Enter a master task prompt.");
- if(!window.BackendConnector.getBaseUrl())return window.DashboardUI?.toast("Start the ephemeral backend first.");
- const button=document.getElementById("send-task");if(button)button.disabled=true;
- addMessage("user",text);
- window.DashboardUI?.log("Submitting master task.","info");
- try{
-  const result=await window.BackendConnector.submitTask({prompt:text,strategy:strategy?.value||"balanced",source:"ai-workspace",requestedAt:new Date().toISOString()});
-  addMessage("ai",result.finalResponse||"Task completed.");
-  window.DashboardUI?.toast("Task completed.");
-  if(result.subBots)window.DashboardUI?.renderBots(result.subBots.map(b=>({role:b.roleRequired,title:b.title,status:b.status,progress:b.status==="completed"?100:60,output:b.output})));
- }catch(e){addMessage("ai","Backend task failed: "+e.message);window.DashboardUI?.log("Task failed: "+e.message,"error");window.DashboardUI?.toast(e.message)}
- finally{if(button)button.disabled=false}
-}
-function addMessage(type,text){
- const box=document.getElementById("chat-messages");if(!box)return;
- const article=document.createElement("article");article.className="bubble "+type;
- article.textContent=String(text);
- if(type==="ai"){const copy=document.createElement("button");copy.className="secondary-btn";copy.textContent="Copy response";copy.onclick=()=>navigator.clipboard?.writeText(String(text));article.appendChild(document.createElement("br"));article.appendChild(copy)}
- box.appendChild(article);box.scrollTop=box.scrollHeight;
-}
-window.BotController={onView,executeTask};
+function edit(id,bots){const b=bots.find(x=>x.id===id);if(!b)return;$("bot-edit-id").value=b.id;$("bot-name").value=b.name;$("bot-category").value=b.category||b.role;$("bot-skills").value=(b.skills||[]).join(", ");$("bot-system-prompt").value=b.systemPrompt||b.brain?.systemPrompt||"";$("bot-submit-label").textContent="Save Bot";window.scrollTo({top:document.body.scrollHeight/2,behavior:"smooth"})}
+async function refresh(){const bots=await list();render(bots);const status=$("bot-registry-status");if(status){status.className="status-badge status-live";status.innerHTML='<span class="status-dot"></span>'+bots.length+" bots loaded"}return bots}
+async function saveForm(e){e.preventDefault();const id=$("bot-edit-id").value.trim(),data={name:$("bot-name").value.trim(),category:$("bot-category").value.trim(),skills:$("bot-skills").value.split(",").map(s=>s.trim()).filter(Boolean),systemPrompt:$("bot-system-prompt").value.trim()};if(!data.name||!data.category)return window.DashboardUI?.toast("Bot name and category are required.");const bot=id?await update(id,data):await create(data);mirrorBot(bot);clearForm();await refresh();window.DashboardUI?.toast(id?"Bot updated.":"Bot created.")}
+function clearForm(){$("bot-edit-id").value="";$("bot-name").value="";$("bot-category").value="";$("bot-skills").value="";$("bot-system-prompt").value="";$("bot-submit-label").textContent="Create Bot"}
+async function loadExisting(){const id=prompt("Enter an existing Bot UUID:");if(!id)return;try{const r=window.BackendConnector.getBaseUrl()?await window.BackendConnector.getBot(id):{bot:readLocal().find(b=>b.id===id)};if(!r?.bot)throw new Error("Bot not found.");mirrorBot(r.bot);edit(id,await list())}catch(e){window.DashboardUI?.toast(e.message)}}
+function onView(route){if(route==="orchestrator"){refresh();$("bot-form")?.addEventListener("submit",saveForm);$("bot-form-clear")?.addEventListener("click",clearForm);$("bot-refresh")?.addEventListener("click",refresh);$("bot-load-existing")?.addEventListener("click",loadExisting)}if(route==="chat"){bindChat();}}
+function bindChat(){const send=$("send-task"),prompt=$("master-prompt");if(send&&!send.dataset.bound){send.dataset.bound="1";send.addEventListener("click",executeTask)}if(prompt&&!prompt.dataset.bound){prompt.dataset.bound="1";prompt.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter")executeTask()})}}
+async function executeTask(){const prompt=$("master-prompt"),strategy=$("chat-strategy"),text=prompt?.value.trim();if(!text)return window.DashboardUI?.toast("Enter a master task prompt.");if(!window.BackendConnector.getBaseUrl())return window.DashboardUI?.toast("Start the ephemeral backend first.");const button=$("send-task");if(button)button.disabled=true;addMessage("user",text);notify("Master Agent is interpreting the request…");window.DashboardUI?.log("Submitting autonomous master task.","info");try{const command=text.match(/create\s+(?:a\s+)?(?:new\s+)?bot\s+(?:named\s+)?["']([^"']+)["']\s+(?:for|as)\s+([a-z0-9 _-]+)(?:\s+with\s+(?:skill|expertise)\s+(.+))?$/i);if(command){const bot=await create({name:command[1],category:command[2],skills:(command[3]||"").split(",").map(s=>s.trim()).filter(Boolean),systemPrompt:command[3]||""});notify("Bot spawned: "+bot.name+" • "+bot.category);addMessage("ai","Created and loaded bot "+bot.name+" ("+bot.id+").");return}const result=await window.BackendConnector.submitTask({prompt:text,strategy:strategy?.value||"balanced",source:"autonomous-master-agent",requestedAt:new Date().toISOString()});(result.subBots||[]).forEach(b=>notify("Delegated: "+(b.title||b.roleRequired||"specialist")));addMessage("ai",result.finalResponse||"Task completed.");window.DashboardUI?.toast("Master Agent completed the task.");if(result.subBots)window.DashboardUI?.renderBots(result.subBots.map(b=>({role:b.roleRequired,title:b.title,status:b.status,progress:b.status==="completed"?100:60,output:b.output})));await refresh()}catch(e){addMessage("ai","Master Agent failed: "+e.message);window.DashboardUI?.log("Autonomous task failed: "+e.message,"error");window.DashboardUI?.toast(e.message)}finally{if(button)button.disabled=false}}
+function notify(message){const box=$("bot-spawn-events");if(!box)return;const item=document.createElement("div");item.className="spawn-event";item.textContent="• "+message;box.prepend(item);while(box.children.length>8)box.lastChild.remove()}
+function addMessage(type,text){const box=$("chat-messages");if(!box)return;const article=document.createElement("article");article.className="bubble "+type;article.textContent=String(text);box.appendChild(article);box.scrollTop=box.scrollHeight}
+window.BotController={onView,executeTask,list,create,update,reset,remove,refresh};
 })();

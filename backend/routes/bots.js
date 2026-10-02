@@ -1,0 +1,10 @@
+const express=require("express");
+const registry=require("../core/bot-registry");
+const router=express.Router();
+router.get("/",async(req,res)=>{try{res.json({status:"ok",bots:await registry.listBots()})}catch(e){res.status(500).json({status:"error",error:e.message})}});
+router.get("/:id",async(req,res)=>{try{const bot=await registry.getBot(req.params.id);if(!bot)return res.status(404).json({status:"not_found"});res.json({status:"ok",bot})}catch(e){res.status(500).json({status:"error",error:e.message})}});
+router.post("/",async(req,res)=>{try{const bot=await registry.createBot(req.body||{});res.status(201).json({status:"created",bot})}catch(e){res.status(400).json({status:"error",error:e.message})}});
+router.patch("/:id",async(req,res)=>{try{res.json({status:"updated",bot:await registry.updateBot(req.params.id,req.body||{})})}catch(e){res.status(400).json({status:"error",error:e.message})}});
+router.post("/:id/reset",async(req,res)=>{try{res.json({status:"reset",bot:await registry.resetBrain(req.params.id)})}catch(e){res.status(404).json({status:"error",error:e.message})}});
+router.delete("/:id",async(req,res)=>{try{res.json({status:"deleted",bot:await registry.deleteBot(req.params.id)})}catch(e){res.status(404).json({status:"error",error:e.message})}});
+module.exports=router;
