@@ -1,7 +1,7 @@
 (() => {
   const cfg=window.AppConfig;
   const API=`https://api.github.com/repos/${cfg.github.owner}/${cfg.github.repo}`;
-  let lastRunId=null;
+  let lastRunId=null,bootPromise=null;
   const getToken=()=>window.AuthController?.getToken?.()||window.TokenStore.get();
   const jsonHeaders=token=>({"Accept":"application/vnd.github+json","Content-Type":"application/json","X-GitHub-Api-Version":"2026-03-10","Authorization":`Bearer ${token}`});
   async function request(url,options={},timeout=cfg.backend.requestTimeoutMs){
@@ -49,5 +49,32 @@
     while(Date.now()-started<maxMs){try{const s=await fetchWorkflowStatus();if(s){const key=`${s.id}:${s.status}:${s.conclusion}`;if(key!==previous){previous=key;onChange?.(s)}if(s.status==="completed"||s.status==="cancelled")return s}}catch(e){window.DashboardUI?.log(e.message,"warn")}await new Promise(r=>setTimeout(r,cfg.backend.pollMs))}
     return fetchWorkflowStatus();
   }
-  window.GitHubBridge={triggerBackendStart,fetchWorkflowStatus,pollWorkflowStatus,discoverTunnelUrl,verifyToken,getToken};
+async function bootAndDiscover({onWorkflowChange,maxMs=180000}={}){
+  if(bootPromise)return bootPromise;
+  bootPromise=(async()=>{
+    await triggerBackendStart();
+    const started=Date.now();let previous="";
+    while(Date.now()-started<maxMs){
+      try{
+        const s=await fetchWorkflowStatus();
+        if(s){
+          const key=`${s.id}:${s.status}:${s.conclusion}`;
+          if(key!==previous){previous=key;onWorkflowChange?.(s)}
+          try{const url=await discoverTunnelUrl(s.id);if(url)return {workflow:s,url}}catch(e){window.DashboardUI?.log("Ngrok discovery pending: "+e.message,"warn")}
+          if(s.status==="completed"||s.status==="cancelled"){
+            if(s.conclusion==="failure")throw new Error("Backend workflow failed.");
+            if(s.status==="completed")throw new Error("Backend workflow completed, but no Ngrok URL was found.");
+          }
+        }
+      }catch(e){
+        if(/Backend workflow failed|completed, but no Ngrok URL/.test(e.message))throw e;
+        window.DashboardUI?.log("Backend discovery pending: "+e.message,"warn");
+      }
+      await new Promise(r=>setTimeout(r,cfg.backend.pollMs));
+    }
+    throw new Error("Timed out waiting for the ephemeral backend Ngrok tunnel.");
+  })().finally(()=>{bootPromise=null});
+  return bootPromise;
+}
+  window.GitHubBridge={triggerBackendStart,fetchWorkflowStatus,pollWorkflowStatus,discoverTunnelUrl,bootAndDiscover,verifyToken,getToken};
 })();
