@@ -153,3 +153,28 @@ img,svg,video,canvas{max-width:100%;height:auto}.field,button,.secondary-btn,.pr
     max-width:78px;
   }
 }
+
+/* Strict mobile header layout — final override */
+.header-controls{display:flex;align-items:center;gap:6px}
+@media(max-width:768px){
+  .topbar,.topbar.strict-mobile-header{display:flex !important;flex-direction:row !important;flex-wrap:nowrap !important;align-items:center !important;justify-content:space-between !important;height:56px !important;min-height:56px !important;max-height:56px !important;padding:6px 10px !important;gap:8px !important;overflow:hidden !important;width:100% !important;box-sizing:border-box !important}
+  .topbar-left{display:flex !important;flex-direction:row !important;flex-wrap:nowrap !important;align-items:center !important;width:auto !important;min-width:0 !important;max-width:50% !important;flex:0 1 auto !important;overflow:hidden !important}
+  .topbar-actions{display:flex !important;flex-direction:row !important;flex-wrap:nowrap !important;align-items:center !important;justify-content:flex-end !important;width:auto !important;min-width:0 !important;max-width:50% !important;flex:0 0 auto !important;gap:0 !important;overflow:hidden !important}
+  .header-controls{display:flex !important;flex-direction:row !important;flex-wrap:nowrap !important;align-items:center !important;justify-content:flex-end !important;gap:6px !important;width:auto !important;min-width:0 !important;max-width:100% !important;flex:0 0 auto !important;overflow:hidden !important}
+  .header-controls .status-badge{display:inline-flex !important;flex:0 1 auto !important;width:auto !important;min-width:0 !important;max-width:78px !important;height:28px !important;min-height:28px !important;padding:4px 6px !important;margin:0 !important;font-size:9px !important;line-height:1 !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}
+  .header-controls .ghost-btn,.header-controls .ghost-btn[hidden]{width:32px !important;min-width:32px !important;max-width:32px !important;height:32px !important;min-height:32px !important;max-height:32px !important;flex:0 0 32px !important;padding:0 !important;margin:0 !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;white-space:nowrap !important}
+  .header-controls .ghost-btn[hidden]{display:none !important}
+  .header-controls .ghost-btn span{display:none !important}
+  .header-controls .ghost-btn svg{width:15px !important;height:15px !important;flex:0 0 15px !important}
+  .topbar-actions>.header-controls{width:auto !important;flex:0 0 auto !important}
+  .topbar-actions>*:not(.header-controls){display:none !important;width:auto !important;max-width:none !important;flex:none !important}
+  #app-content{width:100% !important;max-width:100% !important;margin-top:0 !important;padding:6px 10px 1.5rem !important}
+  #app-content>.view{padding-top:0 !important}
+}
+@media(max-width:480px){
+  .topbar,.topbar.strict-mobile-header{height:56px !important;min-height:56px !important;max-height:56px !important;padding:6px 8px !important}
+  .topbar-left{max-width:46% !important}.topbar-actions{max-width:54% !important}.header-controls{gap:6px !important}
+  .header-controls .status-badge{max-width:64px !important;font-size:8px !important}
+  .header-controls .ghost-btn,.header-controls .ghost-btn[hidden]{width:32px !important;min-width:32px !important;max-width:32px !important;height:32px !important;min-height:32px !important;max-height:32px !important}
+  #app-content{padding:6px 8px 1.25rem !important}
+}

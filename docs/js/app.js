@@ -24,7 +24,9 @@ window.lucide?.createIcons();window.AppRouteState={route:current,title:cfg.title
 }
 function navigate(){load(location.hash.replace(/^#/,"")||"control-center")}
 function escapeHtml(v){return String(v).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
+function bindStrictHeader(){const header=document.querySelector(".topbar"),controls=document.querySelector(".header-controls");if(header)header.classList.add("strict-mobile-header");if(controls){controls.classList.add("header-controls");controls.querySelectorAll(".ghost-btn").forEach(button=>button.classList.add("header-control-button"))}}
 const api={async init(){
+bindStrictHeader();
 document.querySelectorAll("[data-route]").forEach(a=>a.addEventListener("click",()=>{document.getElementById("sidebar").classList.remove("open");document.getElementById("drawer-backdrop").classList.remove("show")}));
 document.getElementById("menu-toggle")?.addEventListener("click",()=>{document.getElementById("sidebar").classList.add("open");document.getElementById("drawer-backdrop").classList.add("show")});
 document.getElementById("drawer-backdrop")?.addEventListener("click",()=>{document.getElementById("sidebar").classList.remove("open");document.getElementById("drawer-backdrop").classList.remove("show")});
