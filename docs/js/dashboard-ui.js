@@ -1,1 +1,30 @@
-// Purpose: Dashboard UI controller placeholder for frontend state and rendering.
+(() => {
+  const $=id=>document.getElementById(id);let logs=[];
+  const ui={
+    init(){
+      $("pat-modal-open")?.addEventListener("click",()=>{const d=$("pat-modal");$("pat-input").value=window.TokenStore.get();d.showModal()});
+      $("pat-modal-close")?.addEventListener("click",()=>$("pat-modal").close());
+      $("pat-save")?.addEventListener("click",async()=>{const t=$("pat-input").value.trim();if(!t){ui.toast("Enter a GitHub PAT.");return}window.TokenStore.set(t);$("pat-modal").close();await ui.refreshGitHubHealth()});
+      $("pat-clear")?.addEventListener("click",()=>{window.TokenStore.clear();$("pat-input").value="";$("github-health").textContent="Not configured";$("pat-modal").close();ui.log("GitHub PAT cleared.","warn")});
+      $("start-backend")?.addEventListener("click",async()=>{try{ui.setGlobalStatus("spinning");ui.log("Requesting ephemeral backend startup...");await window.GitHubBridge.triggerBackendStart();ui.toast("Backend startup requested.");const s=await window.GitHubBridge.pollWorkflowStatus({onChange:ui.applyWorkflowStatus});if(s?.conclusion==="failure")throw new Error("Backend workflow failed.");if(s?.status==="completed"){const url=await window.GitHubBridge.discoverTunnelUrl(s.id);if(url){window.BackendConnector.setBaseUrl(url);window.BackendConnector.startPolling();ui.log("Live Ngrok tunnel discovered from workflow logs.","ok");}else ui.log("Workflow completed, but no Ngrok URL was found in job logs.","warn")}}catch(e){ui.setGlobalStatus("offline");ui.log(e.message,"error");ui.toast(e.message)}});
+      $("kill-backend")?.addEventListener("click",async()=>{if(!window.BackendConnector.getBaseUrl()){ui.toast("No live backend URL.");return}if(!confirm("Emergency shutdown the live backend?"))return;try{await window.BackendConnector.shutdown();ui.setGlobalStatus("offline");ui.toast("Shutdown requested.")}catch(e){ui.log(e.message,"error")}});      
+      $("copy-tunnel")?.addEventListener("click",async()=>{const u=window.BackendConnector.getBaseUrl();if(!u)return ui.toast("No tunnel URL.");await navigator.clipboard?.writeText(u);ui.toast("Tunnel URL copied.")});
+      $("clear-log")?.addEventListener("click",()=>{logs=[];$("terminal").innerHTML=""});
+      $("export-log")?.addEventListener("click",()=>ui.exportLog());
+      ui.log("Dashboard initialized.","ok");ui.renderBots([]);ui.refreshGitHubHealth();window.setInterval(ui.refreshGitHubHealth,30000);
+    },
+    async refreshGitHubHealth(){const ok=await window.GitHubBridge.verifyToken();$("github-health").textContent=ok?"Connected":"Not configured";$("github-health").className=ok?"text-emerald-300":"text-slate-300"},
+    setGlobalStatus(state){const el=$("global-status"),label={offline:"Offline",spinning:"Spinning Up",live:"Live"}[state]||"Offline";el.className=`status-badge status-${state==="spinning"?"spinning":state}`;el.querySelector("span:last-child").textContent=label},
+    setTunnelUrl(url){$("tunnel-url").textContent=url||"No live tunnel"},
+    applyWorkflowStatus(s){if(!s)return;ui.log(`Workflow #${s.id}: ${s.status}${s.conclusion?" / "+s.conclusion:""}`,s.conclusion==="failure"?"error":"info");if(s.status==="in_progress"||s.status==="queued")ui.setGlobalStatus("spinning")},
+    applyBackendStatus(s){ui.setGlobalStatus("live");$("backend-health").textContent="Live";$("subbot-count").textContent=s.activeSubBotCount??0;$("registry-badge").textContent=`${s.activeSubBotCount??0} active`;const hb=s.heartbeat||{};$("heartbeat-value").textContent="Pulse";$("heartbeat-meta").textContent=hb.pulseAt?`Last: ${new Date(hb.pulseAt).toLocaleTimeString()}`:"Live";$("inactivity-value").textContent=formatDuration(Math.max(0,(hb.inactivityTimeoutMs||600000)-(Date.now()-new Date(hb.lastActivityAt||Date.now()).getTime())));$("inactivity-meta").textContent="Resets on request";},
+    renderBots(bots=[]){const grid=$("subbot-grid");$("subbot-count").textContent=bots.length;$("registry-badge").textContent=`${bots.length} active`;if(!bots.length){grid.innerHTML='<div class="empty-state"><i data-lucide="bot-off"></i><p>No active sub-bots</p><small>Accepted tasks will appear here.</small></div>';window.lucide?.createIcons();return}grid.innerHTML=bots.map(b=>`<article class="bot-card"><div class="flex items-start justify-between"><div><p class="eyebrow">ROLE</p><h3 class="font-bold">${escapeHtml(b.role||"Specialist Bot")}</h3></div><span class="bot-status">● ${escapeHtml(b.status||"active")}</span></div><div class="bot-output">${escapeHtml(b.output||"Awaiting output...")}</div></article>`).join("")},
+    setPipeline(step){const order=["accepted","decomposed","running","completed"],i=order.indexOf(step);document.querySelectorAll(".pipeline-step").forEach((el,n)=>{el.classList.toggle("done",n<i);el.classList.toggle("active",n===i)})},
+    log(message,level="info"){const time=new Date().toLocaleTimeString();logs.push(`[${time}] ${message}`);const line=document.createElement("div");line.className=`log-line log-${level}`;line.innerHTML=`<span class="log-time">[${escapeHtml(time)}]</span> ${escapeHtml(message)}`;$("terminal").appendChild(line);$("terminal").scrollTop=$("terminal").scrollHeight},
+    exportLog(){const blob=new Blob([logs.join("\n")],{type:"text/plain;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`ai-agent-audit-${new Date().toISOString().replace(/[:.]/g,"-")}.log`;a.click();URL.revokeObjectURL(a.href)},
+    toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2600)}
+  };
+  function formatDuration(ms){const s=Math.ceil(ms/1000),m=Math.floor(s/60),r=s%60;return `${String(m).padStart(2,"0")}:${String(r).padStart(2,"0")}`}
+  function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+  window.DashboardUI=ui;
+})();
