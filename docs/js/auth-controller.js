@@ -1,7 +1,7 @@
 (() => {
   const cfg=window.AppConfig;
   const TOKEN_URL=cfg.auth.tokenUrl,DEVICE_URL=cfg.auth.deviceCodeUrl,USER_URL=cfg.auth.userUrl;
-  const CORS_PROXY_URL="https://corsproxy.io/?url=";
+  const CORS_PROXY_URL="https://cors-anywhere.herokuapp.com/";
   let pollTimer=null,flowAbort=false,viewBound=false;
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -38,10 +38,11 @@
     }catch(directError){
       setProgress("Direct GitHub request was blocked; trying CORS proxy fallback…");
       try{
-        const proxyEndpoint=CORS_PROXY_URL+encodeURIComponent(endpoint);
-        return await fetch(proxyEndpoint,options);
+        const proxyEndpoint=CORS_PROXY_URL+endpoint;
+        const proxyOptions={...options,headers:{...options.headers,"X-Requested-With":"XMLHttpRequest"}};
+        return await fetch(proxyEndpoint,proxyOptions);
       }catch(proxyError){
-        throw new Error("GitHub OAuth request failed after both direct and CORS-proxy attempts. This can be caused by browser/network blocking, an unavailable proxy, or GitHub OAuth App configuration. Verify Device Flow is enabled, Client ID is correct, and try again on an HTTPS connection.");
+        throw new Error("GitHub OAuth request failed after direct and CORS-proxy attempts. The free proxy may require temporary access or may be unavailable. Verify Device Flow is enabled, the Client ID is correct, and try again on an HTTPS connection.");
       }
     }
   }
@@ -110,10 +111,12 @@
     setProgress("Requesting a GitHub device code…");
     try{
       const d=await requestDeviceCode();
+      const verificationUrl=d.verification_uri_complete||d.verification_uri||"https://github.com/login/device";
       setText("oauth-device-code",d.user_code);setText("oauth-device-expires",Math.ceil(Number(d.expires_in||900)/60)+" minutes");
-      const link=$("oauth-verify-link");if(link){link.href=d.verification_uri_complete||d.verification_uri||"https://github.com/login/device";link.hidden=false}
-      $("oauth-device-card")?.classList.add("visible");setProgress("Verification code ready. Complete authorization in GitHub.");
-      try{window.open(d.verification_uri_complete||d.verification_uri||"https://github.com/login/device","_blank","noopener,noreferrer")}catch{}
+      const link=$("oauth-verify-link");if(link){link.href=verificationUrl;link.hidden=false}
+      setText("oauth-open-url",verificationUrl);
+      $("oauth-device-card")?.classList.add("visible");setProgress("Verification code ready. Opening GitHub authorization in a new tab…");
+      try{window.open(verificationUrl,"_blank","noopener,noreferrer")}catch{}
       pollTimer=pollToken(d.device_code,d.interval,d.expires_in).then(async data=>{
         const user=await fetchUser(data.access_token),expiresAt=data.expires_in?Date.now()+Number(data.expires_in)*1000:0;
         window.TokenStore.setOAuth(data.access_token,data.refresh_token,{login:user.login,id:user.id,avatar:user.avatar_url,scope:data.scope||scopes(),expiresAt,refreshExpiresAt:data.refresh_token_expires_in?Date.now()+Number(data.refresh_token_expires_in)*1000:0});
