@@ -31,59 +31,19 @@
     if(!candidate)return null;if(!lastRunId)lastRunId=candidate.id;
     return {id:candidate.id,status:candidate.status,conclusion:candidate.conclusion,createdAt:candidate.created_at,updatedAt:candidate.updated_at,htmlUrl:candidate.html_url};
   }
-  async function getRunJobs(runId){
-    const token=getToken();if(!token)throw new Error("GitHub authentication required.");
-    const data=await request(`${API}/actions/runs/${runId}/jobs?per_page=100`,{headers:jsonHeaders(token)});return data.jobs||[];
-  }
-  async function readJobLog(jobId){
-    const token=getToken();if(!token)return "";
-    const data=await fetch(`${API}/actions/jobs/${jobId}/logs`,{headers:jsonHeaders(token)});if(!data.ok)throw new Error(`GitHub job log HTTP ${data.status}`);return data.text();
-  }
-  async function fetchPublishedTunnelUrl(){
-    const token=getToken();if(!token)return null;
-    try{
-      const data=await request(API+"/commits/"+encodeURIComponent(cfg.github.branch)+"/status",{headers:jsonHeaders(token)});
-      const status=(data.statuses||[]).find(s=>s.context==="ephemeral-backend-url"&&s.state==="success"&&/^https:\/\//i.test(s.target_url||""));
-      return status?.target_url||null;
-    }catch(e){window.DashboardUI?.log("Published Ngrok status pending: "+e.message,"warn");return null}
-  }
-  async function discoverTunnelUrl(runId){
-    const published=await fetchPublishedTunnelUrl();if(published)return published;
-    const jobs=await getRunJobs(runId);
-    for(const job of jobs){try{const log=await readJobLog(job.id);const matches=log.match(/https:\/\/(?:[a-z0-9-]+\.)?(?:ngrok(?:-free)?\.app|ngrok\.io)\b[^\s"'<>]*/gi)||[];const url=matches.find(u=>/^https:\/\//i.test(u));if(url)return url.replace(/[),.;]+$/,"")}catch(e){window.DashboardUI?.log("Could not read job log "+job.id+": "+e.message,"warn")}}
-    return null;
-  }
+  async function getRunJobs(runId){const token=getToken();if(!token)throw new Error("GitHub authentication required.");const data=await request(`${API}/actions/runs/${runId}/jobs?per_page=100`,{headers:jsonHeaders(token)});return data.jobs||[]}
+  async function readJobLog(jobId){const token=getToken();if(!token)return "";const data=await fetch(`${API}/actions/jobs/${jobId}/logs`,{headers:jsonHeaders(token)});if(!data.ok)throw new Error(`GitHub job log HTTP ${data.status}`);return data.text()}
+  async function fetchPublishedTunnelUrl(){return cfg.backend.baseUrl}
+  async function discoverTunnelUrl(){return cfg.backend.baseUrl}
   async function pollWorkflowStatus({onChange,maxMs=120000}={}){
     const started=Date.now();let previous="";
     while(Date.now()-started<maxMs){try{const s=await fetchWorkflowStatus();if(s){const key=`${s.id}:${s.status}:${s.conclusion}`;if(key!==previous){previous=key;onChange?.(s)}if(s.status==="completed"||s.status==="cancelled")return s}}catch(e){window.DashboardUI?.log(e.message,"warn")}await new Promise(r=>setTimeout(r,cfg.backend.pollMs))}
     return fetchWorkflowStatus();
   }
-async function bootAndDiscover({onWorkflowChange,maxMs=180000}={}){
-  if(bootPromise)return bootPromise;
-  bootPromise=(async()=>{
-    await triggerBackendStart();
-    const started=Date.now();let previous="";
-    while(Date.now()-started<maxMs){
-      try{
-        const s=await fetchWorkflowStatus();
-        if(s){
-          const key=`${s.id}:${s.status}:${s.conclusion}`;
-          if(key!==previous){previous=key;onWorkflowChange?.(s)}
-          try{const url=await discoverTunnelUrl(s.id);if(url)return {workflow:s,url}}catch(e){window.DashboardUI?.log("Ngrok discovery pending: "+e.message,"warn")}
-          if(s.status==="completed"||s.status==="cancelled"){
-            if(s.conclusion==="failure")throw new Error("Backend workflow failed.");
-            if(s.status==="completed")throw new Error("Backend workflow completed, but no Ngrok URL was found.");
-          }
-        }
-      }catch(e){
-        if(/Backend workflow failed|completed, but no Ngrok URL/.test(e.message))throw e;
-        window.DashboardUI?.log("Backend discovery pending: "+e.message,"warn");
-      }
-      await new Promise(r=>setTimeout(r,cfg.backend.pollMs));
-    }
-    throw new Error("Timed out waiting for the ephemeral backend Ngrok tunnel.");
-  })().finally(()=>{bootPromise=null});
-  return bootPromise;
-}
+  async function bootAndDiscover({onWorkflowChange,maxMs=180000}={}){
+    if(bootPromise)return bootPromise;
+    bootPromise=(async()=>{await triggerBackendStart();window.BackendConnector?.setBaseUrl(cfg.backend.baseUrl);await window.BackendConnector?.waitForHealth?.(maxMs);return {workflow:null,url:cfg.backend.baseUrl}})().finally(()=>{bootPromise=null});
+    return bootPromise;
+  }
   window.GitHubBridge={triggerBackendStart,fetchWorkflowStatus,pollWorkflowStatus,discoverTunnelUrl,fetchPublishedTunnelUrl,bootAndDiscover,verifyToken,getToken};
 })();

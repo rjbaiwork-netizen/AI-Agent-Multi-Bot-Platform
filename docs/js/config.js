@@ -14,7 +14,16 @@
       tokenUrl:"https://github.com/login/oauth/access_token",
       userUrl:"https://api.github.com/user"
     },
-    backend: { statusPath:"/api/status", taskPath:"/api/task", shutdownPath:"/api/shutdown", pollMs:5000, requestTimeoutMs:8000, forwardGithubAuth:true },
+    backend: {
+      baseUrl:"https://lahoma-scenographical-inconveniently.ngrok-free.dev",
+      healthUrl:"https://lahoma-scenographical-inconveniently.ngrok-free.dev/health",
+      statusPath:"/api/status",
+      taskPath:"/api/task",
+      shutdownPath:"/api/shutdown",
+      pollMs:5000,
+      requestTimeoutMs:8000,
+      forwardGithubAuth:true
+    },
     heartbeat: { intervalMs:30000, inactivityTimeoutMs:600000 },
     storageKey: PAT_KEY
   });

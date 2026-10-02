@@ -25,6 +25,7 @@ jobs:
       TELEGRAM_BOT_LINKS: ${{ secrets.TELEGRAM_BOT_LINKS }}
       BACKEND_RUN_TIMEOUT_SECONDS: 600
       NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+      NGROK_STATIC_URL: https://lahoma-scenographical-inconveniently.ngrok-free.dev
       NGROK_STATUS_CONTEXT: ephemeral-backend-url
       GITHUB_TOKEN: ${{ github.token }}
 
@@ -43,11 +44,17 @@ jobs:
         working-directory: backend
         run: npm install --no-audit --no-fund
 
+      - name: Install Ngrok CLI
+        run: npm install --global ngrok
+
+      - name: Configure Ngrok
+        run: ngrok config add-authtoken "$NGROK_AUTHTOKEN"
+
       - name: Report backend boot event
         run: node scripts/telegram-notifier.js
         continue-on-error: true
 
-      - name: Start ephemeral backend
+      - name: Start static Ngrok tunnel and backend
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -62,39 +69,64 @@ jobs:
               kill -KILL "$BACKEND_PID" 2>/dev/null || true
               wait "$BACKEND_PID" 2>/dev/null || true
             fi
+            if [[ -n "${NGROK_PID:-}" ]] && kill -0 "$NGROK_PID" 2>/dev/null; then
+              kill -TERM "$NGROK_PID" 2>/dev/null || true
+              wait "$NGROK_PID" 2>/dev/null || true
+            fi
             exit "$status"
           }
           trap cleanup EXIT INT TERM
 
-          node backend/server.js &
-          BACKEND_PID=$!
+          ngrok http 8080 --url https://lahoma-scenographical-inconveniently.ngrok-free.dev > /tmp/ngrok.log 2>&1 &
+          NGROK_PID=$!
+          echo "Static Ngrok tunnel started with PID $NGROK_PID"
 
-          echo "Ephemeral backend started with PID $BACKEND_PID"
-          NGROK_URL=""
-          for _ in {1..60}; do
-            NGROK_URL="$(curl -fsS http://127.0.0.1:4040/api/tunnels 2>/dev/null | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next((t.get("public_url","") for t in data.get("tunnels",[]) if t.get("public_url","")), ""))' 2>/dev/null || true)"
-            if [[ "$NGROK_URL" == https://* ]]; then break; fi
+          for _ in {1..30}; do
+            if curl -fsS http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; then break; fi
+            if ! kill -0 "$NGROK_PID" 2>/dev/null; then
+              echo "::error::Ngrok process exited unexpectedly."
+              cat /tmp/ngrok.log || true
+              exit 1
+            fi
             sleep 1
           done
-          if [[ "$NGROK_URL" != https://* ]]; then
-            echo "::error::Ngrok tunnel URL was not available from http://127.0.0.1:4040/api/tunnels"
+
+          if ! curl -fsS http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; then
+            echo "::error::Ngrok local API did not become ready."
+            cat /tmp/ngrok.log || true
             exit 1
           fi
-          export NGROK_URL
+
+          node backend/server.js &
+          BACKEND_PID=$!
+          echo "Ephemeral backend started with PID $BACKEND_PID"
+
+          for _ in {1..60}; do
+            if curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1; then break; fi
+            if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+              echo "::error::Backend process exited before /health became ready."
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if ! curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1; then
+            echo "::error::Backend health endpoint did not become ready."
+            exit 1
+          fi
+
+          export NGROK_URL="$NGROK_STATIC_URL"
           echo "NGROK_URL=$NGROK_URL" >> "$GITHUB_ENV"
-          echo "Ngrok URL captured: $NGROK_URL"
-          STATUS_PAYLOAD="$(python3 -c 'import json,os; print(json.dumps({"state":"success","target_url":os.environ["NGROK_URL"],"description":"Ephemeral backend is online","context":os.environ["NGROK_STATUS_CONTEXT"]}))')"
-          curl -fsS -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
-            -d "$STATUS_PAYLOAD"
-          echo "Ephemeral backend published at $NGROK_URL"
+          echo "Static Ngrok URL: $NGROK_URL"
+
+          STATUS_PAYLOAD="$(python3 -c 'import json,os; print(json.dumps({"state":"success","target_url":os.environ["NGROK_STATIC_URL"],"description":"Static Ngrok backend is online","context":os.environ["NGROK_STATUS_CONTEXT"]}))')"
+          curl -fsS -X POST             -H "Accept: application/vnd.github+json"             -H "Authorization: Bearer $GITHUB_TOKEN"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"             -d "$STATUS_PAYLOAD"
+
+          echo "Static backend published at $NGROK_URL"
           timeout --signal=TERM --kill-after=10s "${BACKEND_RUN_TIMEOUT_SECONDS}s" tail --pid="$BACKEND_PID" -f /dev/null
 
       - name: Graceful cleanup
         if: always()
         shell: bash
         run: |
-          echo "Phase 1 ephemeral backend cleanup completed."
+          echo "Static Ngrok/backend cleanup completed."

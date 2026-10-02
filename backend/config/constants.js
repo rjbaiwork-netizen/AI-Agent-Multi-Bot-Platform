@@ -1,4 +1,4 @@
-const PORT = Number(process.env.PORT || 3000);
+const PORT = Number(process.env.PORT || 8080);
 const INACTIVITY_TIMEOUT_MS = 600000;
 const HEARTBEAT_INTERVAL_MS = 30000;
 
