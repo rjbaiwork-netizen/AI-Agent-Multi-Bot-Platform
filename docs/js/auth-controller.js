@@ -26,10 +26,10 @@
   }
   function setProgress(message){setText("oauth-flow-status",message);window.DashboardUI?.log("OAuth: "+message,"info")}
   function clearError(){const e=$("oauth-error");if(e){e.hidden=true;e.textContent=""}}
-  function showError(message){const e=$("oauth-error");if(e){e.hidden=false;e.textContent=String(message||"GitHub OAuth request failed.")}setProgress("Error: "+message);window.DashboardUI?.log("OAuth error: "+message,"error")}
+  function showError(){const e=$("oauth-error");if(e){e.hidden=false;e.textContent="GitHub sign-in could not start. Please try again."}setProgress("GitHub sign-in could not start.");window.DashboardUI?.log("OAuth sign-in failed","error")}
   function friendlyNetworkError(e){
-    if(e instanceof TypeError) return "GitHub OAuth could not be reached directly. The app will try the CORS proxy fallback; if that also fails, check your network/CORS policy and GitHub OAuth App Device Flow setting.";
-    return e?.message||"GitHub OAuth request failed.";
+    if(e instanceof TypeError) return "GitHub sign-in could not start. Please try again.";
+    return "GitHub sign-in could not start. Please try again.";
   }
   async function postOAuth(endpoint,body){
     const options={method:"POST",headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams(body)};
@@ -39,8 +39,7 @@
       setProgress("Direct GitHub request was blocked; trying CORS proxy fallback…");
       try{
         const proxyEndpoint=CORS_PROXY_URL+endpoint;
-        const proxyOptions={...options,headers:{...options.headers,"X-Requested-With":"XMLHttpRequest"}};
-        return await fetch(proxyEndpoint,proxyOptions);
+        return await fetch(proxyEndpoint,options);
       }catch(proxyError){
         throw new Error("GitHub OAuth request failed after direct and CORS-proxy attempts. The free proxy may require temporary access or may be unavailable. Verify Device Flow is enabled, the Client ID is correct, and try again on an HTTPS connection.");
       }
@@ -114,16 +113,15 @@
       const verificationUrl=d.verification_uri_complete||d.verification_uri||"https://github.com/login/device";
       setText("oauth-device-code",d.user_code);setText("oauth-device-expires",Math.ceil(Number(d.expires_in||900)/60)+" minutes");
       const link=$("oauth-verify-link");if(link){link.href=verificationUrl;link.hidden=false}
-      setText("oauth-open-url",verificationUrl);
-      $("oauth-device-card")?.classList.add("visible");setProgress("Verification code ready. Opening GitHub authorization in a new tab…");
-      try{window.open(verificationUrl,"_blank","noopener,noreferrer")}catch{}
+      $("oauth-device-card")?.classList.add("visible");setProgress("Opening GitHub authorization…");
+      try{window.open(verificationUrl,"_blank")}catch{}
       pollTimer=pollToken(d.device_code,d.interval,d.expires_in).then(async data=>{
         const user=await fetchUser(data.access_token),expiresAt=data.expires_in?Date.now()+Number(data.expires_in)*1000:0;
         window.TokenStore.setOAuth(data.access_token,data.refresh_token,{login:user.login,id:user.id,avatar:user.avatar_url,scope:data.scope||scopes(),expiresAt,refreshExpiresAt:data.refresh_token_expires_in?Date.now()+Number(data.refresh_token_expires_in)*1000:0});
         setProgress("Authenticated as @"+user.login+".");window.DashboardUI?.toast("GitHub OAuth login successful.");syncUI();
         if(location.hash==="#login")location.hash="#control-center";
-      }).catch(e=>{showError(friendlyNetworkError(e));window.DashboardUI?.toast(e.message)}).finally(()=>{pollTimer=null;syncUI()});
-    }catch(e){showError(friendlyNetworkError(e));window.DashboardUI?.toast(e.message)}
+      }).catch(e=>{showError();window.DashboardUI?.toast(e.message)}).finally(()=>{pollTimer=null;syncUI()});
+    }catch(e){showError();window.DashboardUI?.toast(e.message)}
   }
   function logout(){
     flowAbort=true;pollTimer=null;window.TokenStore.clearOAuth();syncUI();window.DashboardUI?.toast("GitHub OAuth session cleared.");if(location.hash==="#login")location.hash="#control-center";
