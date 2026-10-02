@@ -1,6 +1,7 @@
 (() => {
   const cfg=window.AppConfig;
   const TOKEN_URL=cfg.auth.tokenUrl,DEVICE_URL=cfg.auth.deviceCodeUrl,USER_URL=cfg.auth.userUrl;
+  const CORS_PROXY_URL="https://corsproxy.io/?key=137d992&url=";
   let pollTimer=null,flowAbort=false,viewBound=false;
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -27,7 +28,8 @@
   function clearError(){const e=$("oauth-error");if(e){e.hidden=true;e.textContent=""}}
   function showError(){const e=$("oauth-error");if(e){e.hidden=false;e.textContent="GitHub sign-in could not start. Please try again."}setProgress("GitHub sign-in could not start.");window.DashboardUI?.log("OAuth sign-in failed","error")}
   async function postOAuth(endpoint,body){
-    return fetch(endpoint,{
+    const proxyEndpoint=CORS_PROXY_URL+encodeURIComponent(endpoint);
+    return fetch(proxyEndpoint,{
       method:"POST",
       mode:"cors",
       headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},
@@ -103,7 +105,10 @@
       setText("oauth-device-code",d.user_code);setText("oauth-device-expires",Math.ceil(Number(d.expires_in||900)/60)+" minutes");
       const link=$("oauth-verify-link");if(link){link.href=verificationUrl;link.hidden=false}
       $("oauth-device-card")?.classList.add("visible");setProgress("GitHub authorization opened. Waiting for approval…");
-      try{if(authTab&&!authTab.closed)authTab.location.href=verificationUrl}catch{}
+      try{
+        window.open(verificationUrl,"_blank");
+        if(authTab&&!authTab.closed)authTab.location.href=verificationUrl;
+      }catch{}
       pollTimer=pollToken(d.device_code,d.interval,d.expires_in).then(async data=>{
         const user=await fetchUser(data.access_token),expiresAt=data.expires_in?Date.now()+Number(data.expires_in)*1000:0;
         window.TokenStore.setOAuth(data.access_token,data.refresh_token,{login:user.login,id:user.id,avatar:user.avatar_url,scope:data.scope||scopes(),expiresAt,refreshExpiresAt:data.refresh_token_expires_in?Date.now()+Number(data.refresh_token_expires_in)*1000:0});
