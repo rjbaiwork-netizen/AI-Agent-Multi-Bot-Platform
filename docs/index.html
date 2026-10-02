@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#070b14">
-<meta name="description" content="Professional control plane for the On-Demand Ephemeral AI Agent & Multi-Bot Platform">
+<meta name="description" content="Professional 9-module control plane for the On-Demand Ephemeral AI Agent & Multi-Bot Platform">
 <title>AI Agent Multi-Bot Control Plane</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,6 +24,8 @@
 <a href="#analytics" data-route="analytics"><i data-lucide="chart-no-axes-combined"></i><span>Analytics & API</span></a>
 <a href="#settings" data-route="settings"><i data-lucide="settings-2"></i><span>Platform Settings</span></a>
 <a href="#docs" data-route="docs"><i data-lucide="book-open"></i><span>Documentation</span></a>
+<a href="#profile" data-route="profile"><i data-lucide="user-cog"></i><span>Admin Profile</span></a>
+<a href="#backup" data-route="backup"><i data-lucide="database-backup"></i><span>System Backup & Recovery</span></a>
 </nav>
 <div class="sidebar-footer"><div class="mini-health"><span id="side-status-dot"></span><span id="side-status-text">Offline</span></div><button id="mobile-pat" class="ghost-btn"><i data-lucide="key-round"></i> GitHub PAT</button></div>
 </aside>
@@ -33,15 +35,8 @@
 <div class="topbar-left"><button id="menu-toggle" class="icon-btn mobile-only" aria-label="Open menu"><i data-lucide="menu"></i></button><div><p class="eyebrow">ON-DEMAND EPHEMERAL AI</p><h1 id="view-title">Control Center</h1></div></div>
 <div class="topbar-actions"><span id="global-status" class="status-badge status-offline"><span class="status-dot"></span><span>Offline</span></span><span class="repo-pill"><i data-lucide="github"></i><span>rjbaiwork-netizen/AI-Agent-Multi-Bot-Platform</span></span><button id="pat-modal-open" class="ghost-btn"><i data-lucide="key-round"></i><span>GitHub PAT</span></button></div>
 </header>
-<section id="app-view" class="view-host" aria-live="polite"></section>
+<section id="app-content" class="view-host" aria-live="polite"></section>
 </main>
-<nav class="bottom-nav" id="bottom-nav">
-<a href="#control-center" data-route="control-center"><i data-lucide="layout-dashboard"></i><span>Home</span></a>
-<a href="#chat" data-route="chat"><i data-lucide="message-square"></i><span>AI</span></a>
-<a href="#orchestrator" data-route="orchestrator"><i data-lucide="workflow"></i><span>Bots</span></a>
-<a href="#logs" data-route="logs"><i data-lucide="terminal"></i><span>Logs</span></a>
-<a href="#settings" data-route="settings"><i data-lucide="settings-2"></i><span>More</span></a>
-</nav>
 </div>
 <dialog id="pat-modal" class="modal"><div class="modal-card"><div class="modal-head"><div><p class="eyebrow">GITHUB ACCESS</p><h2>Personal Access Token</h2></div><button id="pat-modal-close" class="icon-btn"><i data-lucide="x"></i></button></div><p class="muted">Stored only in this browser's local storage. Use a least-privilege token.</p><label class="field-label" for="pat-input">GitHub PAT</label><input id="pat-input" class="field" type="password" autocomplete="off" placeholder="github_pat_..."><div class="modal-actions"><button id="pat-clear" class="secondary-btn">Clear</button><button id="pat-save" class="primary-btn">Save Token</button></div></div></dialog>
 <div id="toast" class="toast" role="status"></div>

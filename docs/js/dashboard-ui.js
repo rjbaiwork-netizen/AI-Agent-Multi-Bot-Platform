@@ -1,8 +1,10 @@
 (() => {
-let logs=[];let countdownTimer=null;const $=id=>document.getElementById(id);const esc=v=>String(v??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+let logs=[];let countdownTimer=null;let backupTimer=null;const $=id=>document.getElementById(id);const esc=v=>String(v??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const BACKUP_KEY="ai-agent-multi-bot.platform-backup.latest";
+const AUTO_KEY="ai-agent-multi-bot.platform-backup.autosave";
 const ui={
 init(){bindPat();this.log("Control plane initialized.","ok");setInterval(()=>this.refreshGitHubHealth(),30000);this.refreshGitHubHealth();},
-onView(route){if(route==="control-center")this.bindControlCenter();if(route==="logs")this.bindLogs();if(route==="settings")this.bindSettings();},
+onView(route){if(route==="control-center")this.bindControlCenter();if(route==="logs")this.bindLogs();if(route==="settings")this.bindSettings();if(route==="profile")this.bindProfile();if(route==="backup")this.bindBackup();},
 bindControlCenter(){
 $("start-backend")?.addEventListener("click",async()=>{try{ui.setGlobalStatus("spinning");ui.log("Requesting ephemeral backend startup…","info");await window.GitHubBridge.triggerBackendStart();ui.toast("Backend startup requested.");const s=await window.GitHubBridge.pollWorkflowStatus({onChange:ui.applyWorkflowStatus});if(s?.conclusion==="failure")throw new Error("Backend workflow failed.");if(s?.status==="completed"){const url=await window.GitHubBridge.discoverTunnelUrl(s.id);if(url){window.BackendConnector.setBaseUrl(url);window.BackendConnector.startPolling();ui.log("Live Ngrok tunnel discovered.","ok")}else ui.log("Workflow completed, but no Ngrok URL was found.","warn")}}catch(e){ui.setGlobalStatus("offline");ui.log(e.message,"error");ui.toast(e.message)}});
 $("kill-backend")?.addEventListener("click",async()=>{if(!window.BackendConnector.getBaseUrl())return ui.toast("No live backend URL.");if(!confirm("Emergency shutdown the live backend?"))return;try{await window.BackendConnector.shutdown();ui.setGlobalStatus("offline");ui.toast("Shutdown requested.")}catch(e){ui.log(e.message,"error")}});
@@ -11,6 +13,37 @@ ui.renderBots([]);ui.renderPipeline("accepted");ui.refreshGitHubHealth();
 },
 bindLogs(){const t=$("terminal");if(!t)return;t.innerHTML=logs.map(x=>'<div class="log-line">'+esc(x.text)+'</div>').join("");$("clear-log")?.addEventListener("click",()=>{logs=[];t.innerHTML="";ui.toast("Audit log cleared.")});$("export-log")?.addEventListener("click",ui.exportLog);},
 bindSettings(){$("clear-storage")?.addEventListener("click",()=>{localStorage.clear();ui.toast("Local storage cleared.");ui.refreshGitHubHealth()});$("theme-toggle")?.addEventListener("click",()=>{document.body.classList.toggle("high-contrast");ui.toast("Theme preference toggled for this session.")})},
+bindProfile(){
+const refresh=async()=>{const token=window.TokenStore.get();const valid=await window.GitHubBridge.verifyToken();const status=$("profile-pat-status");if(status){status.textContent=!token?"Not saved":valid?"Verified":"Saved / not verified";status.className=valid?"ok":token?"warn":"error"}const fp=$("profile-pat-fingerprint");if(fp)fp.textContent=token?token.slice(0,4)+"••••"+token.slice(-4):"—";const gh=$("profile-github-status");if(gh){gh.textContent=valid?"Connected":token?"Not verified":"Not configured";gh.className=valid?"ok":token?"warn":"muted"}const backend=$("profile-backend-status");if(backend)backend.textContent=window.BackendConnector.getBaseUrl()?"Live":"Offline";};
+$("profile-update-pat")?.addEventListener("click",()=>{$("pat-input").value=window.TokenStore.get();$("pat-modal").showModal()});
+$("profile-clear-pat")?.addEventListener("click",()=>{window.TokenStore.clear();refresh();ui.toast("GitHub PAT cleared.")});
+refresh();
+},
+bindBackup(){
+const latest=localStorage.getItem(BACKUP_KEY);const toggle=$("backup-autosave");if(toggle){toggle.checked=localStorage.getItem(AUTO_KEY)==="1";toggle.onchange=()=>{localStorage.setItem(AUTO_KEY,toggle.checked?"1":"0");ui.configureBackupAutoSave();ui.backupLog(toggle.checked?"Auto-save enabled.":"Auto-save disabled.")};}
+$("backup-export")?.addEventListener("click",()=>ui.downloadBackup());
+$("backup-file")?.addEventListener("change",e=>{const f=e.target.files?.[0];if(f)ui.importBackupFile(f)});
+$("backup-reset")?.addEventListener("click",ui.resetPlatform);
+const dz=$("backup-dropzone");if(dz){["dragenter","dragover"].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add("dragover")}));["dragleave","drop"].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove("dragover")}));dz.addEventListener("drop",e=>{const f=e.dataTransfer?.files?.[0];if(f)ui.importBackupFile(f)})}
+if(latest){try{$("backup-latest").textContent=new Date(JSON.parse(latest).createdAt).toLocaleString()}catch{}}
+ui.configureBackupAutoSave();
+},
+collectBackup(){
+const local={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k)continue;local[k]=k===window.AppConfig?.storageKey?"[REDACTED]":localStorage.getItem(k)}
+const session={};for(let i=0;i<sessionStorage.length;i++){const k=sessionStorage.key(i);if(k)session[k]=sessionStorage.getItem(k)}
+const messages=[...document.querySelectorAll("#chat-messages .bubble")].map(el=>({type:el.classList.contains("user")?"user":"ai",text:el.innerText.replace(/\s*Copy response$/,"").trim()}));
+const bots=[...document.querySelectorAll(".bot-card")].map(el=>el.innerText.trim());
+return{schemaVersion:1,createdAt:new Date().toISOString(),platform:"AI-Agent-Multi-Bot-Platform",route:window.App?.current||"control-center",credentials:{patPresent:window.TokenStore.has(),pat:"[REDACTED]"},localStorage:local,sessionStorage:session,chatHistory:messages,subBotConfigurations:bots,dashboardSettings:{autoSave:localStorage.getItem(AUTO_KEY)==="1",theme:document.body.className||"default"}};
+},
+downloadBackup(){
+const data=ui.collectBackup(),date=new Date().toISOString().slice(0,10),blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="platform-backup-"+date+".json";a.click();URL.revokeObjectURL(url);localStorage.setItem(BACKUP_KEY,JSON.stringify(data));$("backup-latest")&&($("backup-latest").textContent=new Date(data.createdAt).toLocaleString());ui.backupLog("Backup exported: platform-backup-"+date+".json");ui.setBackupStatus("Backup saved","live");
+},
+async importBackupFile(file){
+try{const data=JSON.parse(await file.text());if(!data||data.schemaVersion!==1||typeof data.localStorage!=="object")throw new Error("Unsupported backup format.");for(const [k,v] of Object.entries(data.localStorage)){if(k===window.AppConfig?.storageKey)continue;localStorage.setItem(k,String(v??""))}if(data.sessionStorage&&typeof data.sessionStorage==="object")for(const [k,v] of Object.entries(data.sessionStorage))sessionStorage.setItem(k,String(v??""));localStorage.setItem(BACKUP_KEY,JSON.stringify(data));$("backup-file-name")&&($("backup-file-name").textContent=file.name+" imported successfully.");ui.backupLog("Backup restored from "+file.name+" (PAT remains untouched).");ui.setBackupStatus("Restore complete","live");ui.toast("Backup restored. Reloading platform state…");setTimeout(()=>location.reload(),900)}catch(e){ui.backupLog("Restore failed: "+e.message);ui.setBackupStatus("Restore failed","offline");ui.toast("Backup restore failed: "+e.message)}},
+configureBackupAutoSave(){clearInterval(backupTimer);if(localStorage.getItem(AUTO_KEY)==="1"){backupTimer=setInterval(()=>{try{const data=ui.collectBackup();localStorage.setItem(BACKUP_KEY,JSON.stringify(data));const e=$("backup-latest");if(e)e.textContent=new Date(data.createdAt).toLocaleString();ui.backupLog("Auto-save snapshot refreshed.")}catch(e){ui.backupLog("Auto-save failed: "+e.message)}},60000)}},
+resetPlatform:async()=>{if(!confirm("Full Platform Reset will clear this site's local state, session data, and CacheStorage. Continue?"))return;try{localStorage.clear();sessionStorage.clear();if("caches"in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)))}ui.backupLog("Full platform reset completed.");ui.toast("Platform reset complete. Reloading…");setTimeout(()=>location.reload(),500)}catch(e){ui.toast("Reset completed with cache warning: "+e.message);setTimeout(()=>location.reload(),500)}},
+setBackupStatus(text,state){const e=$("backup-status");if(e){e.className="status-badge status-"+state;e.innerHTML='<span class="status-dot"></span>'+esc(text)}},
+backupLog(message){const t=$("backup-log");if(!t)return;const line=document.createElement("div");line.className="log-line";line.textContent="["+new Date().toLocaleTimeString()+"] "+message;t.appendChild(line);t.scrollTop=t.scrollHeight},
 async refreshGitHubHealth(){const ok=await window.GitHubBridge.verifyToken();const el=$("github-health");if(el){el.textContent=ok?"Connected":"Not configured";el.className=ok?"ok":"muted"}},
 setGlobalStatus(state){const el=$("global-status"),dot=$("side-status-dot"),text=$("side-status-text");const label={offline:"Offline",spinning:"Spinning Up",live:"Live"}[state]||"Offline";if(el){el.className="status-badge status-"+(state==="spinning"?"spinning":state);const s=el.querySelector("span:last-child");if(s)s.textContent=label}if(text)text.textContent=label;if(dot)dot.style.background=state==="live"?"#4ade80":state==="spinning"?"#f59e0b":"#64748b"},
 setTunnelUrl(url){const e=$("tunnel-url");if(e)e.textContent=url||"No live tunnel"},
