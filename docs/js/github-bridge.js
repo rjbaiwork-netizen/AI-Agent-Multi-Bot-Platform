@@ -43,7 +43,7 @@
     const token=getToken();if(!token)return null;
     try{
       const data=await request(API+"/commits/"+encodeURIComponent(cfg.github.branch)+"/status",{headers:jsonHeaders(token)});
-      const status=(data.statuses||[]).find(s=>s.context==="ephemeral-backend"&&s.state==="success"&&/^https:\/\//i.test(s.target_url||""));
+      const status=(data.statuses||[]).find(s=>s.context==="ephemeral-backend-url"&&s.state==="success"&&/^https:\/\//i.test(s.target_url||""));
       return status?.target_url||null;
     }catch(e){window.DashboardUI?.log("Published Ngrok status pending: "+e.message,"warn");return null}
   }

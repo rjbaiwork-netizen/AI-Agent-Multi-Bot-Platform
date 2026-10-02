@@ -25,7 +25,8 @@ jobs:
       TELEGRAM_BOT_LINKS: ${{ secrets.TELEGRAM_BOT_LINKS }}
       BACKEND_RUN_TIMEOUT_SECONDS: 600
       NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
-      NGROK_STATUS_CONTEXT: ephemeral-backend
+      NGROK_STATUS_CONTEXT: ephemeral-backend-url
+      GITHUB_TOKEN: ${{ github.token }}
 
     steps:
       - name: Checkout repository
@@ -79,6 +80,7 @@ jobs:
             echo "::error::Ngrok tunnel URL was not available from http://127.0.0.1:4040/api/tunnels"
             exit 1
           fi
+          export NGROK_URL
           echo "NGROK_URL=$NGROK_URL" >> "$GITHUB_ENV"
           echo "Ngrok URL captured: $NGROK_URL"
           STATUS_PAYLOAD="$(python3 -c 'import json,os; print(json.dumps({"state":"success","target_url":os.environ["NGROK_URL"],"description":"Ephemeral backend is online","context":os.environ["NGROK_STATUS_CONTEXT"]}))')"
