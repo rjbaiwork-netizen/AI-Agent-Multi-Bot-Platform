@@ -1,1 +1,75 @@
-# Purpose: GitHub Actions workflow placeholder for the ephemeral backend runner.
+name: Ephemeral Backend Engine
+
+on:
+  repository_dispatch:
+    types: [start-backend, trigger-task]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ephemeral-backend-${{ github.event.client_payload.task_id || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  backend-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_BOT_NAME: ${{ secrets.TELEGRAM_BOT_NAME }}
+      TELEGRAM_BOT_LINKS: ${{ secrets.TELEGRAM_BOT_LINKS }}
+      BACKEND_RUN_TIMEOUT_SECONDS: 600
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js v20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm install --no-audit --no-fund
+
+      - name: Report backend boot event
+        run: node scripts/telegram-notifier.js
+        continue-on-error: true
+
+      - name: Start ephemeral backend
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cleanup() {
+            status=$?
+            if [[ -n "${BACKEND_PID:-}" ]] && kill -0 "$BACKEND_PID" 2>/dev/null; then
+              kill -TERM "$BACKEND_PID" 2>/dev/null || true
+              for _ in {1..10}; do
+                kill -0 "$BACKEND_PID" 2>/dev/null || break
+                sleep 1
+              done
+              kill -KILL "$BACKEND_PID" 2>/dev/null || true
+              wait "$BACKEND_PID" 2>/dev/null || true
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT INT TERM
+
+          node backend/server.js &
+          BACKEND_PID=$!
+
+          echo "Ephemeral backend started with PID $BACKEND_PID"
+          timeout --signal=TERM --kill-after=10s "${BACKEND_RUN_TIMEOUT_SECONDS}s"             tail --pid="$BACKEND_PID" -f /dev/null
+
+      - name: Graceful cleanup
+        if: always()
+        shell: bash
+        run: |
+          echo "Phase 1 ephemeral backend cleanup completed."
