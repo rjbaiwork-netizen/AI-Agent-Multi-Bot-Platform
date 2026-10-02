@@ -25,6 +25,7 @@ jobs:
       TELEGRAM_BOT_LINKS: ${{ secrets.TELEGRAM_BOT_LINKS }}
       BACKEND_RUN_TIMEOUT_SECONDS: 600
       NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+      NGROK_API_KEY: ${{ secrets.NGROK_API_KEY }}
       NGROK_STATIC_URL: https://lahoma-scenographical-inconveniently.ngrok-free.dev
       NGROK_STATUS_CONTEXT: ephemeral-backend-url
       GITHUB_TOKEN: ${{ github.token }}
@@ -115,7 +116,65 @@ jobs:
             exit 1
           fi
 
-          export NGROK_URL="$NGROK_STATIC_URL"
+          echo "Inspecting active Ngrok tunnels through the REST API..."
+          API_TUNNELS=""
+          if [[ -n "${NGROK_API_KEY:-}" ]]; then
+            API_TUNNELS="$(curl -fsS -H "Authorization: Bearer $NGROK_API_KEY" -H "Accept: application/json" https://api.ngrok.com/tunnels || true)"
+          else
+            echo "::warning::NGROK_API_KEY is empty; REST API monitoring is unavailable."
+          fi
+
+          STATIC_API_ACTIVE=false
+          if [[ -n "$API_TUNNELS" ]] && grep -q '"public_url":"https://lahoma-scenographical-inconveniently.ngrok-free.dev"' <<<"$API_TUNNELS"; then
+            STATIC_API_ACTIVE=true
+            echo "Ngrok REST API confirms the static domain is active."
+          fi
+
+          DOMAIN_HEALTH=false
+          if curl -fsS --max-time 10 "$NGROK_STATIC_URL/health" >/tmp/ngrok-health.json 2>/dev/null; then
+            DOMAIN_HEALTH=true
+            echo "Static domain health check passed: $NGROK_STATIC_URL/health"
+          fi
+
+          if [[ "$STATIC_API_ACTIVE" != true || "$DOMAIN_HEALTH" != true ]]; then
+            echo "::warning::Static tunnel/API health check failed; restarting Ngrok tunnel automatically."
+            kill -TERM "$NGROK_PID" 2>/dev/null || true
+            wait "$NGROK_PID" 2>/dev/null || true
+            ngrok http 8080 --url https://lahoma-scenographical-inconveniently.ngrok-free.dev > /tmp/ngrok.log 2>&1 &
+            NGROK_PID=$!
+            for _ in {1..30}; do
+              if curl -fsS http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; then break; fi
+              if ! kill -0 "$NGROK_PID" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            if [[ -n "${NGROK_API_KEY:-}" ]]; then
+              API_TUNNELS="$(curl -fsS -H "Authorization: Bearer $NGROK_API_KEY" -H "Accept: application/json" https://api.ngrok.com/tunnels || true)"
+            fi
+            if curl -fsS --max-time 10 "$NGROK_STATIC_URL/health" >/tmp/ngrok-health.json 2>/dev/null; then
+              DOMAIN_HEALTH=true
+              echo "Static domain recovered after automatic Ngrok restart."
+            fi
+          fi
+
+          FALLBACK_NGROK_URL=""
+          if [[ -n "$API_TUNNELS" ]]; then
+            FALLBACK_NGROK_URL="$(python3 -c 'import json,sys; d=json.loads(sys.stdin.read()); print(next((t.get("public_url","") for t in d.get("tunnels",[]) if t.get("public_url")), ""))' <<<"$API_TUNNELS" 2>/dev/null || true)"
+            [[ -n "$FALLBACK_NGROK_URL" ]] && echo "Ngrok API active tunnel URI: $FALLBACK_NGROK_URL"
+          fi
+
+          if [[ "$DOMAIN_HEALTH" != true ]]; then
+            if [[ -n "$FALLBACK_NGROK_URL" ]]; then
+              echo "::warning::Static domain remains unhealthy; using API-reported fallback tunnel URI: $FALLBACK_NGROK_URL"
+              export NGROK_URL="$FALLBACK_NGROK_URL"
+            else
+              echo "::error::No healthy static domain and no active fallback tunnel URI reported by Ngrok API."
+              cat /tmp/ngrok.log || true
+              exit 1
+            fi
+          else
+            export NGROK_URL="$NGROK_STATIC_URL"
+          fi
+          echo "NGROK_URL=$NGROK_URL" >> "$GITHUB_ENV"
           echo "NGROK_URL=$NGROK_URL" >> "$GITHUB_ENV"
           echo "Static Ngrok URL: $NGROK_URL"
 
