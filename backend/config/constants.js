@@ -1,1 +1,5 @@
-// Purpose: Central backend constants and configuration definitions.
+const PORT = Number(process.env.PORT || 3000);
+const INACTIVITY_TIMEOUT_MS = 600000;
+const HEARTBEAT_INTERVAL_MS = 30000;
+
+module.exports = { PORT, INACTIVITY_TIMEOUT_MS, HEARTBEAT_INTERVAL_MS };
