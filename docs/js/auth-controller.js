@@ -1,7 +1,6 @@
 (() => {
   const cfg=window.AppConfig;
   const TOKEN_URL=cfg.auth.tokenUrl,DEVICE_URL=cfg.auth.deviceCodeUrl,USER_URL=cfg.auth.userUrl;
-  const CORS_PROXY_URL="https://cors-anywhere.herokuapp.com/";
   let pollTimer=null,flowAbort=false,viewBound=false;
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -27,23 +26,13 @@
   function setProgress(message){setText("oauth-flow-status",message);window.DashboardUI?.log("OAuth: "+message,"info")}
   function clearError(){const e=$("oauth-error");if(e){e.hidden=true;e.textContent=""}}
   function showError(){const e=$("oauth-error");if(e){e.hidden=false;e.textContent="GitHub sign-in could not start. Please try again."}setProgress("GitHub sign-in could not start.");window.DashboardUI?.log("OAuth sign-in failed","error")}
-  function friendlyNetworkError(e){
-    if(e instanceof TypeError) return "GitHub sign-in could not start. Please try again.";
-    return "GitHub sign-in could not start. Please try again.";
-  }
   async function postOAuth(endpoint,body){
-    const options={method:"POST",headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams(body)};
-    try{
-      return await fetch(endpoint,options);
-    }catch(directError){
-      setProgress("Direct GitHub request was blocked; trying CORS proxy fallback…");
-      try{
-        const proxyEndpoint=CORS_PROXY_URL+endpoint;
-        return await fetch(proxyEndpoint,options);
-      }catch(proxyError){
-        throw new Error("GitHub OAuth request failed after direct and CORS-proxy attempts. The free proxy may require temporary access or may be unavailable. Verify Device Flow is enabled, the Client ID is correct, and try again on an HTTPS connection.");
-      }
-    }
+    return fetch(endpoint,{
+      method:"POST",
+      mode:"cors",
+      headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},
+      body:new URLSearchParams(body)
+    });
   }
   async function parseResponse(r){
     const text=await r.text();let data={};try{data=JSON.parse(text)}catch{data=Object.fromEntries(new URLSearchParams(text))}
@@ -87,7 +76,7 @@
   async function refresh(){
     const refreshToken=window.TokenStore.getOAuthRefresh(),id=clientId();if(!refreshToken||!id)return false;
     try{
-      const r=await fetch(TOKEN_URL,{method:"POST",headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:id,refresh_token:refreshToken,grant_type:"refresh_token"})});
+      const r=await fetch(TOKEN_URL,{method:"POST",mode:"cors",headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:id,refresh_token:refreshToken,grant_type:"refresh_token"})});
       const data=await parseResponse(r);const expiresAt=data.expires_in?Date.now()+Number(data.expires_in)*1000:0;
       const user=await fetchUser(data.access_token);
       window.TokenStore.setOAuth(data.access_token,data.refresh_token||refreshToken,{login:user.login,id:user.id,avatar:user.avatar_url,scope:data.scope||scopes(),expiresAt,refreshExpiresAt:data.refresh_token_expires_in?Date.now()+Number(data.refresh_token_expires_in)*1000:0});
@@ -109,12 +98,13 @@
     clearError();
     setProgress("Requesting a GitHub device code…");
     try{
+      const authTab=window.open("https://github.com/login/device","_blank");
       const d=await requestDeviceCode();
       const verificationUrl=d.verification_uri_complete||d.verification_uri||"https://github.com/login/device";
       setText("oauth-device-code",d.user_code);setText("oauth-device-expires",Math.ceil(Number(d.expires_in||900)/60)+" minutes");
       const link=$("oauth-verify-link");if(link){link.href=verificationUrl;link.hidden=false}
-      $("oauth-device-card")?.classList.add("visible");setProgress("Opening GitHub authorization…");
-      try{window.open(verificationUrl,"_blank")}catch{}
+      $("oauth-device-card")?.classList.add("visible");setProgress("GitHub authorization opened. Waiting for approval…");
+      try{if(authTab&&!authTab.closed)authTab.location.href=verificationUrl}catch{}
       pollTimer=pollToken(d.device_code,d.interval,d.expires_in).then(async data=>{
         const user=await fetchUser(data.access_token),expiresAt=data.expires_in?Date.now()+Number(data.expires_in)*1000:0;
         window.TokenStore.setOAuth(data.access_token,data.refresh_token,{login:user.login,id:user.id,avatar:user.avatar_url,scope:data.scope||scopes(),expiresAt,refreshExpiresAt:data.refresh_token_expires_in?Date.now()+Number(data.refresh_token_expires_in)*1000:0});
