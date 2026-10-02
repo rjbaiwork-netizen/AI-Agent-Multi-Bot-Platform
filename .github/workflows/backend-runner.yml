@@ -47,7 +47,7 @@ jobs:
       - name: Install Ngrok CLI
         run: npm install --global ngrok
 
-      - name: Configure Ngrok
+      - name: Configure Ngrok with stored authtoken
         run: ngrok config add-authtoken "$NGROK_AUTHTOKEN"
 
       - name: Report backend boot event

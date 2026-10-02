@@ -3,6 +3,7 @@
   const OAUTH_TOKEN_KEY = "ai-agent-multi-bot.github-oauth.token";
   const OAUTH_REFRESH_KEY = "ai-agent-multi-bot.github-oauth.refresh";
   const OAUTH_META_KEY = "ai-agent-multi-bot.github-oauth.meta";
+  const STATIC_BACKEND_URL = "https://lahoma-scenographical-inconveniently.ngrok-free.dev";
   const cfg = Object.freeze({
     github: { owner:"rjbaiwork-netizen", repo:"AI-Agent-Multi-Bot-Platform", branch:"main", workflow:"backend-runner.yml", events:Object.freeze({startBackend:"start-backend",triggerTask:"trigger-task"}) },
     auth: {
@@ -15,8 +16,8 @@
       userUrl:"https://api.github.com/user"
     },
     backend: {
-      baseUrl:"https://lahoma-scenographical-inconveniently.ngrok-free.dev",
-      healthUrl:"https://lahoma-scenographical-inconveniently.ngrok-free.dev/health",
+      baseUrl:STATIC_BACKEND_URL,
+      healthUrl:STATIC_BACKEND_URL+"/health",
       statusPath:"/api/status",
       taskPath:"/api/task",
       shutdownPath:"/api/shutdown",
