@@ -7,7 +7,7 @@
     github: { owner:"rjbaiwork-netizen", repo:"AI-Agent-Multi-Bot-Platform", branch:"main", workflow:"backend-runner.yml", events:Object.freeze({startBackend:"start-backend",triggerTask:"trigger-task"}) },
     auth: {
       provider:"github",
-      githubClientId:"YOUR_CLIENT_ID_HERE",
+      githubClientId:"Ov23lifrakUAgHKymiu4",
       scopes:"repo offline_access",
       deviceFlow:true,
       deviceCodeUrl:"https://github.com/login/device/code",
