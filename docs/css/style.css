@@ -178,3 +178,62 @@ img,svg,video,canvas{max-width:100%;height:auto}.field,button,.secondary-btn,.pr
   .header-controls .ghost-btn,.header-controls .ghost-btn[hidden]{width:32px !important;min-width:32px !important;max-width:32px !important;height:32px !important;min-height:32px !important;max-height:32px !important}
   #app-content{padding:6px 8px 1.25rem !important}
 }
+
+/* Minimal mobile header — hide non-essential top-right controls */
+@media(max-width:768px){
+  .topbar{
+    height:48px !important;
+    min-height:48px !important;
+    max-height:48px !important;
+    padding:4px 10px !important;
+    gap:8px !important;
+  }
+  .topbar-left{
+    width:100% !important;
+    max-width:100% !important;
+    flex:1 1 auto !important;
+    gap:7px !important;
+  }
+  .topbar-left .mobile-only{
+    width:32px !important;
+    min-width:32px !important;
+    max-width:32px !important;
+    height:32px !important;
+    min-height:32px !important;
+    max-height:32px !important;
+    flex:0 0 32px !important;
+    padding:0 !important;
+  }
+  .topbar-left .eyebrow{display:none !important}
+  .topbar h1{
+    margin:0 !important;
+    font-size:14px !important;
+    line-height:1 !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+  }
+  .topbar-actions,
+  .header-controls,
+  #global-status,
+  #header-auth-badge,
+  #pat-modal-open,
+  #header-logout{
+    display:none !important;
+  }
+  #app-content{
+    margin-top:0 !important;
+    padding:4px 10px 1.25rem !important;
+  }
+  #app-content>.view{padding-top:0 !important}
+}
+@media(max-width:480px){
+  .topbar{
+    height:48px !important;
+    min-height:48px !important;
+    max-height:48px !important;
+    padding:4px 8px !important;
+  }
+  .topbar h1{font-size:13px !important}
+  #app-content{padding:4px 8px 1rem !important}
+}
