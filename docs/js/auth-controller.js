@@ -1,6 +1,7 @@
 (() => {
   const cfg=window.AppConfig;
   const TOKEN_URL=cfg.auth.tokenUrl,DEVICE_URL=cfg.auth.deviceCodeUrl,USER_URL=cfg.auth.userUrl;
+  const CORS_PROXY_URL="https://corsproxy.io/?url=";
   let pollTimer=null,flowAbort=false,viewBound=false;
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -27,8 +28,22 @@
   function clearError(){const e=$("oauth-error");if(e){e.hidden=true;e.textContent=""}}
   function showError(message){const e=$("oauth-error");if(e){e.hidden=false;e.textContent=String(message||"GitHub OAuth request failed.")}setProgress("Error: "+message);window.DashboardUI?.log("OAuth error: "+message,"error")}
   function friendlyNetworkError(e){
-    if(e instanceof TypeError) return "GitHub OAuth could not be reached from this browser. This may be a CORS/network block. Verify the GitHub OAuth App, Device Flow setting, and that this page is served over HTTPS.";
+    if(e instanceof TypeError) return "GitHub OAuth could not be reached directly. The app will try the CORS proxy fallback; if that also fails, check your network/CORS policy and GitHub OAuth App Device Flow setting.";
     return e?.message||"GitHub OAuth request failed.";
+  }
+  async function postOAuth(endpoint,body){
+    const options={method:"POST",headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams(body)};
+    try{
+      return await fetch(endpoint,options);
+    }catch(directError){
+      setProgress("Direct GitHub request was blocked; trying CORS proxy fallback…");
+      try{
+        const proxyEndpoint=CORS_PROXY_URL+encodeURIComponent(endpoint);
+        return await fetch(proxyEndpoint,options);
+      }catch(proxyError){
+        throw new Error("GitHub OAuth request failed after both direct and CORS-proxy attempts. This can be caused by browser/network blocking, an unavailable proxy, or GitHub OAuth App configuration. Verify Device Flow is enabled, Client ID is correct, and try again on an HTTPS connection.");
+      }
+    }
   }
   async function parseResponse(r){
     const text=await r.text();let data={};try{data=JSON.parse(text)}catch{data=Object.fromEntries(new URLSearchParams(text))}
@@ -43,10 +58,7 @@
   }
   async function requestDeviceCode(){
     const id=clientId();if(!id)throw new Error("GitHub OAuth Client ID is not configured. Set AppConfig.auth.githubClientId in docs/js/config.js.");
-    let r;
-    try{
-      r=await fetch(DEVICE_URL,{method:"POST",headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:id,scope:scopes()})});
-    }catch(e){throw new Error(friendlyNetworkError(e))}
+    const r=await postOAuth(DEVICE_URL,{client_id:id,scope:scopes()});
     return parseResponse(r);
   }
   async function pollToken(deviceCode,interval,expiresIn){
@@ -54,10 +66,7 @@
     let wait=Math.max(5000,Number(interval||5)*1000);
     while(!flowAbort&&Date.now()<deadline){
       await sleep(wait);if(flowAbort)break;
-      let r;
-      try{
-        r=await fetch(TOKEN_URL,{method:"POST",headers:{"Accept":"application/json","Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:id,device_code:deviceCode,grant_type:"urn:ietf:params:oauth:grant-type:device_code"})});
-      }catch(e){throw new Error(friendlyNetworkError(e))}
+      const r=await postOAuth(TOKEN_URL,{client_id:id,device_code:deviceCode,grant_type:"urn:ietf:params:oauth:grant-type:device_code"});
       const text=await r.text();let data={};try{data=JSON.parse(text)}catch{data=Object.fromEntries(new URLSearchParams(text))}
       if(data.access_token)return data;
       if(data.error==="authorization_pending"){setProgress("Waiting for GitHub authorization…");continue}
