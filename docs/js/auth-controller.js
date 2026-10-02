@@ -92,13 +92,12 @@
     if(token)try{const user=await fetchUser(token);window.TokenStore.setOAuth(token,window.TokenStore.getOAuthRefresh(),Object.assign({},m,{login:user.login,id:user.id,avatar:user.avatar_url}));syncUI();return}catch{}
     window.TokenStore.clearOAuth();syncUI();
   }
-  async function startLogin(){
+  async function startLogin(authTab){
     if(pollTimer)return;
     flowAbort=false;
     clearError();
     setProgress("Requesting a GitHub device code…");
     try{
-      const authTab=window.open("https://github.com/login/device","_blank");
       const d=await requestDeviceCode();
       const verificationUrl=d.verification_uri_complete||d.verification_uri||"https://github.com/login/device";
       setText("oauth-device-code",d.user_code);setText("oauth-device-expires",Math.ceil(Number(d.expires_in||900)/60)+" minutes");
@@ -122,7 +121,10 @@
   }
   function bindView(){
     bindGlobal();
-    $("github-oauth-signin")?.addEventListener("click",startLogin);
+    $("github-oauth-signin")?.addEventListener("click",()=>{
+      const authTab=window.open("https://github.com/login/device","_blank");
+      startLogin(authTab);
+    });
     $("auth-logout")?.addEventListener("click",logout);
     $("auth-pat-fallback")?.addEventListener("click",()=>{$("pat-input")?.focus();$("pat-modal")?.showModal()});
   }
