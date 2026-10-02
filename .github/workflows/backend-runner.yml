@@ -125,7 +125,7 @@ jobs:
           fi
 
           STATIC_API_ACTIVE=false
-          if [[ -n "$API_TUNNELS" ]] && grep -q '"public_url":"https://lahoma-scenographical-inconveniently.ngrok-free.dev"' <<<"$API_TUNNELS"; then
+          if [[ -n "$API_TUNNELS" ]] && python3 -c 'import json,sys; d=json.loads(sys.stdin.read()); raise SystemExit(0 if any(t.get("public_url") == "https://lahoma-scenographical-inconveniently.ngrok-free.dev" for t in d.get("tunnels",[])) else 1)' <<<"$API_TUNNELS" 2>/dev/null; then
             STATIC_API_ACTIVE=true
             echo "Ngrok REST API confirms the static domain is active."
           fi
